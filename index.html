@@ -826,7 +826,7 @@ See the LICENSE file for details.
         <div class="pref-section">
             <h4>Behavior</h4>
             <label class="pref-check">
-                <input type="checkbox" id="pauseOnBlurCheck" checked onchange="setPauseOnBlur(this.checked)">
+                <input type="checkbox" id="pauseOnBlurCheck" onchange="setPauseOnBlur(this.checked)">
                 Show pause overlay when this window loses focus
             </label>
         </div>
@@ -1202,7 +1202,7 @@ document.addEventListener('click', function initOnce() {
 
 // ---------- Pause on window blur ----------
 let paused = false;
-let pauseOnBlur = true;
+let pauseOnBlur = false;
 let nativeDialogOpen = false;
 let nativeDialogClosedAt = 0;
 
