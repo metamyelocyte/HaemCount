@@ -1,1499 +1,1754 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HaemCount</title>
-<!--
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HaemCount</title>
+    <!--
 HaemCount — a web reimplementation of the HEMCOUNT differential cell counter
 Copyright (C) 2026  Tiffany Lau
 Licensed under the GNU General Public License v3.0 (GPLv3).
 See the LICENSE file for details.
 -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<style>
-    :root {
-        --bg: #ebebeb;
-        --panel: #ffffff;
-        --border: #c0c0c0;
-        --accent: #2c7be5;
-        --danger: #e74c3c;
-        --text: #1e1e1e;
-        --muted: #6b6b6b;
-        --titlebar: #3a3a3a;
-        --titlebar-text: #ffffff;
-        --menu-bg: #f5f5f5;
-        --input-bg: #ffffff;
-        --toast-bg: #2b2b2b;
-        --toast-text: #ffffff;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-        height: 100%;
-        width: 100%;
-        font-family: 'Segoe UI', Tahoma, system-ui, -apple-system, sans-serif;
-        font-size: 12px;
-        background: var(--bg);
-        color: var(--text);
-        overflow: hidden;
-    }
-    .app {
-        width: 100vw;
-        height: 100vh;
-        background: var(--bg);
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        transition: filter 0.2s ease, opacity 0.2s ease;
-    }
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #ebebeb;
+            --panel: #ffffff;
+            --border: #c0c0c0;
+            --accent: #2c7be5;
+            --danger: #e74c3c;
+            --text: #1e1e1e;
+            --muted: #6b6b6b;
+            --titlebar: #3a3a3a;
+            --titlebar-text: #ffffff;
+            --menu-bg: #f5f5f5;
+            --input-bg: #ffffff;
+            --toast-bg: #2b2b2b;
+            --toast-text: #ffffff;
+        }
 
-    /* Title bar */
-    .titlebar {
-        background: var(--titlebar);
-        color: var(--titlebar-text);
-        padding: 4px 10px;
-        font-weight: 600;
-        font-size: 11.5px;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        flex-shrink: 0;
-    }
-    .titlebar .close {
-        cursor: pointer;
-        opacity: 0.65;
-        font-size: 13px;
-        line-height: 1;
-        padding: 0 2px;
-    }
-    .titlebar .close:hover { opacity: 1; }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-    /* Menu bar */
-    .menu {
-        display: flex;
-        gap: 18px;
-        padding: 4px 12px;
-        background: var(--menu-bg);
-        border-bottom: 1px solid var(--border);
-        font-size: 11.5px;
-        color: var(--text);
-        align-items: center;
-        flex-shrink: 0;
-        flex-wrap: wrap;
-    }
-    .menu span { cursor: pointer; user-select: none; white-space: nowrap; }
-    .menu span:hover { color: var(--accent); }
+        html,
+        body {
+            height: 100%;
+            width: 100%;
+            font-family: 'Segoe UI', Tahoma, system-ui, -apple-system, sans-serif;
+            font-size: 12px;
+            background: var(--bg);
+            color: var(--text);
+            overflow: hidden;
+        }
 
-    /* Main content */
-    .main {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        padding: 6px 8px;
-        gap: 5px;
-        overflow: hidden;
-        min-height: 0;
-    }
+        .app {
+            width: 100vw;
+            height: 100vh;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            transition: filter 0.2s ease, opacity 0.2s ease;
+        }
 
-    /* Shared grid template: 3 columns, shared by top-section and diff-grid */
-    .top-section,
-    .diff-grid {
-        display: grid;
-        grid-template-columns: repeat(3, minmax(140px, 1fr));
-        gap: 4px;
-    }
-    @media (max-width: 640px) {
+        /* Title bar */
+        .titlebar {
+            background: var(--titlebar);
+            color: var(--titlebar-text);
+            padding: 4px 10px;
+            font-weight: 600;
+            font-size: 11.5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .titlebar .close {
+            cursor: pointer;
+            opacity: 0.65;
+            font-size: 13px;
+            line-height: 1;
+            padding: 0 2px;
+        }
+
+        .titlebar .close:hover {
+            opacity: 1;
+        }
+
+        /* Menu bar */
+        .menu {
+            display: flex;
+            gap: 18px;
+            padding: 4px 12px;
+            background: var(--menu-bg);
+            border-bottom: 1px solid var(--border);
+            font-size: 11.5px;
+            color: var(--text);
+            align-items: center;
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+
+        .menu span {
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .menu span:hover {
+            color: var(--accent);
+        }
+
+        /* Main content */
+        .main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 6px 8px;
+            gap: 5px;
+            overflow: hidden;
+            min-height: 0;
+        }
+
+        /* Shared grid template: 3 columns, shared by top-section and diff-grid */
         .top-section,
-        .diff-grid { grid-template-columns: 1fr 1fr; }
-    }
-    @media (max-width: 420px) {
-        .top-section,
-        .diff-grid { grid-template-columns: 1fr; }
-    }
+        .diff-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(140px, 1fr));
+            gap: 4px;
+        }
 
-    .top-section {
-        flex-shrink: 0;
-    }
+        @media (max-width: 640px) {
 
-    /* Parameters grid — spans the full width now that the "Other" input is gone */
-    .params-grid {
-        grid-column: 1 / -1;
-        display: grid;
-        grid-template-columns: max-content 1fr;
-        gap: 3px 8px;
-        align-items: center;
-        font-size: 11.5px;
-    }
-    .params-grid > label {
-        color: var(--text);
-        white-space: nowrap;
-        cursor: pointer;
-    }
-    /* Field wrapper keeps the unit glued to its input box */
-    .param-field {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        min-width: 0;
-        justify-self: start;
-    }
-    .param-field input[type="number"] {
-        width: 92px;
-        flex: 0 0 auto;
-        padding: 2px 6px;
-        border: 1px solid var(--border);
-        border-radius: 3px;
-        background: var(--input-bg);
-        color: var(--text);
-        font-size: 11px;
-        text-align: right;
-        height: 20px;
-    }
-    .param-field .unit {
-        font-size: 10px;
-        color: var(--text);
-        white-space: nowrap;
-    }
-
-    /* Differential cells */
-    .diff-cell {
-        display: flex;
-        align-items: center;
-        gap: 3px;
-        padding: 3px 5px;
-        border: 1px solid var(--border);
-        border-radius: 3px;
-        background: var(--menu-bg);
-        min-height: 26px;
-        overflow: hidden;
-    }
-    .diff-cell .cell-label {
-        flex: 1 1 auto;
-        font-size: 10px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        min-width: 0;
-        color: var(--text);
-    }
-    /* Inline-editable "Other" name inside its diff cell */
-    .diff-cell .editable-label {
-        outline: none;
-        padding: 0 1px;
-        border-radius: 2px;
-        border-bottom: 1px dashed transparent;
-        cursor: text;
-        transition: background 0.12s, border-color 0.12s;
-    }
-    .diff-cell .editable-label:hover {
-        border-bottom-color: var(--muted);
-        background: var(--input-bg);
-    }
-    .diff-cell .editable-label:focus {
-        border-bottom-color: var(--accent);
-        background: var(--input-bg);
-        box-shadow: 0 0 0 1px var(--accent);
-    }
-    .diff-cell .count-wrap {
-        display: flex;
-        align-items: stretch;
-        flex-shrink: 0;
-    }
-    .diff-cell .count-box {
-        width: 30px;
-        padding: 1px 3px;
-        border: 1px solid var(--border);
-        border-right: none;
-        border-radius: 3px 0 0 3px;
-        background: var(--input-bg);
-        color: var(--text);
-        font-size: 10.5px;
-        font-weight: 700;
-        text-align: center;
-        outline: none;
-        cursor: text;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 20px;
-    }
-    .diff-cell .count-box:focus {
-        outline: 1.5px solid var(--accent);
-        outline-offset: -1.5px;
-    }
-    .diff-cell .spinner {
-        display: flex;
-        flex-direction: column;
-        border: 1px solid var(--border);
-        border-radius: 0 3px 3px 0;
-        background: var(--panel);
-        overflow: hidden;
-        flex-shrink: 0;
-    }
-    .diff-cell .spinner button {
-        width: 16px;
-        height: 10px;
-        border: none;
-        background: var(--panel);
-        color: var(--text);
-        cursor: pointer;
-        font-size: 6.5px;
-        line-height: 1;
-        padding: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-    .diff-cell .spinner button:hover { background: var(--border); }
-    .diff-cell .spinner button.up { border-bottom: 1px solid var(--border); }
-
-    /* Percentage immediately adjacent to the count box */
-    .diff-cell .pct {
-        font-size: 9.5px;
-        color: var(--muted);
-        text-align: right;
-        flex-shrink: 0;
-        min-width: 28px;
-        padding-left: 2px;
-    }
-
-    /* Mode radio cell */
-    .mode-cell {
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
-        gap: 4px;
-        padding: 3px 5px;
-        font-size: 10.5px;
-    }
-    .mode-cell label {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        cursor: pointer;
-        white-space: nowrap;
-    }
-    .mode-cell input[type="radio"] {
-        width: 12px;
-        height: 12px;
-        margin: 0;
-    }
-    .mode-cell .ratio {
-        margin-top: 2px;
-        font-size: 9.5px;
-        color: var(--muted);
-    }
-    .mode-cell .ratio strong { color: var(--accent); }
-
-    /* Histogram panel */
-    .hist-panel {
-        border: 1px solid var(--border);
-        border-radius: 3px;
-        background: var(--panel);
-        padding: 4px 6px;
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        min-height: 90px;
-    }
-    .hist-container {
-        position: relative;
-        flex: 1;
-        width: 100%;
-        min-height: 70px;
-    }
-
-    /* Output panel */
-    .output-panel {
-        border: 1px solid var(--border);
-        border-radius: 3px;
-        background: var(--panel);
-        padding: 4px 6px;
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        min-height: 80px;
-    }
-    .output-header {
-        font-size: 10.5px;
-        color: var(--muted);
-        margin-bottom: 3px;
-        font-style: italic;
-        flex-shrink: 0;
-    }
-    .output-box {
-        flex: 1;
-        padding: 4px 6px;
-        background: var(--panel);
-        color: var(--text);
-        border: 1px solid var(--border);
-        border-radius: 3px;
-        font-family: 'Consolas', 'Courier New', monospace;
-        font-size: 9.5px;
-        white-space: pre-wrap;
-        line-height: 1.35;
-        overflow-y: auto;
-        cursor: pointer;
-        transition: background 0.12s, border-color 0.12s;
-        min-height: 0;
-    }
-    .output-box:hover {
-        background: var(--menu-bg);
-        border-color: var(--accent);
-    }
-    .output-box:active { background: var(--border); }
-
-    /* Status bar */
-    .statusbar {
-        padding: 4px 12px;
-        background: var(--menu-bg);
-        border-top: 1px solid var(--border);
-        font-size: 11.5px;
-        color: var(--text);
-        display: flex;
-        justify-content: space-between;
-        flex-shrink: 0;
-        gap: 8px;
-    }
-    .statusbar strong { color: var(--text); }
-
-    /* Modals */
-    .modal {
-        display: none;
-        position: fixed;
-        z-index: 1000;
-        inset: 0;
-        background-color: rgba(0,0,0,0.42);
-        align-items: center;
-        justify-content: center;
-    }
-    .modal.open { display: flex; }
-    .modal-content {
-        background-color: var(--panel);
-        color: var(--text);
-        padding: 16px 18px;
-        border: 1px solid var(--border);
-        width: 90%;
-        max-width: 420px;
-        border-radius: 6px;
-        position: relative;
-        box-shadow: 0 8px 26px rgba(0,0,0,0.28);
-        max-height: 88vh;
-        overflow-y: auto;
-        font-size: 11px;
-    }
-    .modal-content .close {
-        position: absolute;
-        right: 10px;
-        top: 6px;
-        font-size: 18px;
-        cursor: pointer;
-        color: var(--muted);
-        line-height: 1;
-    }
-    .modal-content .close:hover { color: var(--text); }
-    .modal-content h2 {
-        margin-bottom: 10px;
-        font-size: 12px;
-        color: var(--text);
-    }
-    .modal-content p {
-        margin-bottom: 6px;
-        font-size: 10px;
-        line-height: 1.4;
-        color: var(--muted);
-    }
-    .modal-content button {
-        padding: 4px 10px;
-        background: var(--accent);
-        color: #fff;
-        border: none;
-        border-radius: 3px;
-        cursor: pointer;
-        font-size: 10.5px;
-    }
-    .modal-content button:hover { filter: brightness(0.92); }
-    .modal-content button.secondary {
-        background: transparent;
-        color: var(--text);
-        border: 1px solid var(--border);
-    }
-    .modal-content button.secondary:hover { background: var(--border); }
-
-    .pref-section {
-        margin-bottom: 10px;
-        padding-bottom: 8px;
-        border-bottom: 1px solid var(--border);
-    }
-    .pref-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-    .pref-section h4 {
-        font-size: 9.5px;
-        margin-bottom: 5px;
-        color: var(--text);
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-        font-weight: 700;
-    }
-    .pref-section select {
-        padding: 2px 6px;
-        border: 1px solid var(--border);
-        border-radius: 3px;
-        background: var(--input-bg);
-        color: var(--text);
-        font-size: 10.5px;
-        width: 100%;
-    }
-    .pref-check {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        cursor: pointer;
-        font-size: 10.5px;
-        color: var(--text);
-    }
-    .pref-check input[type="checkbox"] {
-        width: 14px;
-        height: 14px;
-        margin: 0;
-    }
-    .volume-row {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 10px;
-    }
-    .volume-row input[type="range"] { flex: 1; }
-    .sound-row {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        margin-bottom: 4px;
-        font-size: 10px;
-    }
-    .sound-row label { flex: 1; }
-    .sound-row input[type="file"] {
-        max-width: 110px;
-        font-size: 8.5px;
-        color: var(--text);
-    }
-    .sound-row button { padding: 2px 6px; font-size: 9px; }
-
-    .layout-row {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        padding: 3px 0;
-        border-bottom: 1px solid var(--border);
-        font-size: 10.5px;
-    }
-    .layout-row:last-child { border-bottom: none; }
-    .layout-row span { flex: 1; }
-    .layout-row button {
-        padding: 1px 6px;
-        font-size: 9.5px;
-        background: transparent;
-        color: var(--text);
-        border: 1px solid var(--border);
-    }
-    .layout-row button:hover:not(:disabled) { background: var(--border); }
-    .layout-row button:disabled { opacity: 0.35; cursor: not-allowed; }
-
-    .keybind-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        padding: 3px 0;
-        border-bottom: 1px solid var(--border);
-        font-size: 10.5px;
-    }
-    .keybind-row:last-child { border-bottom: none; }
-    .keybind-row label { flex: 1; }
-    .keybind-row input {
-        width: 32px;
-        text-align: center;
-        padding: 1px;
-        border: 1px solid var(--border);
-        border-radius: 3px;
-        background: var(--input-bg);
-        color: var(--text);
-        font-family: monospace;
-        font-size: 11px;
-    }
-    .keybind-row input:focus { outline: 2px solid var(--accent); }
-
-    /* ---------- Backlog ---------- */
-    .backlog-save-row {
-        display: flex;
-        gap: 6px;
-        align-items: stretch;
-    }
-    .backlog-save-row input {
-        flex: 1;
-        min-width: 0;
-        padding: 4px 7px;
-        border: 1px solid var(--border);
-        border-radius: 3px;
-        background: var(--input-bg);
-        color: var(--text);
-        font-size: 11px;
-        height: 24px;
-    }
-    .backlog-list {
-        display: flex;
-        flex-direction: column;
-        gap: 4px;
-        max-height: 42vh;
-        overflow-y: auto;
-        padding-right: 2px;
-    }
-    .backlog-item {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 6px 8px;
-        border: 1px solid var(--border);
-        border-radius: 4px;
-        background: var(--menu-bg);
-    }
-    .backlog-item .info {
-        flex: 1;
-        min-width: 0;
-    }
-    .backlog-item .info .label {
-        font-weight: 700;
-        font-size: 11px;
-        color: var(--text);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-    .backlog-item .info .meta {
-        font-size: 9.5px;
-        color: var(--muted);
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        margin-top: 1px;
-    }
-    .backlog-item button {
-        padding: 3px 9px;
-        font-size: 9.5px;
-        flex-shrink: 0;
-    }
-    .backlog-empty {
-        font-size: 10px;
-        color: var(--muted);
-        font-style: italic;
-        padding: 8px 0;
-        text-align: center;
-    }
-    .backlog-footer {
-        display: flex;
-        justify-content: space-between;
-        gap: 6px;
-        margin-top: 12px;
-        padding-top: 10px;
-        border-top: 1px solid var(--border);
-    }
-
-    .toast {
-        position: fixed;
-        bottom: 16px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: var(--toast-bg);
-        color: var(--toast-text);
-        padding: 6px 14px;
-        border-radius: 4px;
-        font-size: 10.5px;
-        opacity: 0;
-        transition: opacity 0.3s;
-        pointer-events: none;
-        z-index: 2000;
-    }
-    .toast.show { opacity: 1; }
-
-    /* ---------- Paused overlay ---------- */
-    body.paused .app {
-        filter: grayscale(0.85) blur(2px);
-        opacity: 0.5;
-        pointer-events: none;
-        user-select: none;
-    }
-    .pause-overlay {
-        position: fixed;
-        inset: 0;
-        z-index: 1500;
-        display: none;
-        align-items: center;
-        justify-content: center;
-        background: rgba(10, 14, 22, 0.62);
-        -webkit-backdrop-filter: blur(5px) grayscale(0.6);
-        backdrop-filter: blur(5px) grayscale(0.6);
-        cursor: pointer;
-        animation: pauseFade 0.18s ease-out;
-    }
-    .pause-overlay.show { display: flex; }
-    .pause-card {
-        text-align: center;
-        padding: 26px 40px;
-        border-radius: 12px;
-        background: rgba(18, 22, 30, 0.9);
-        border: 2px solid rgba(255, 255, 255, 0.28);
-        box-shadow: 0 14px 46px rgba(0, 0, 0, 0.55);
-        color: #fff;
-        max-width: 90vw;
-        animation: pausePop 0.2s ease-out;
-    }
-    .pause-icon { font-size: 36px; line-height: 1; margin-bottom: 8px; }
-    .pause-card h1 {
-        font-size: 32px;
-        letter-spacing: 8px;
-        margin-bottom: 8px;
-        color: #ffd166;
-        text-shadow: 0 0 18px rgba(255, 209, 102, 0.45);
-        animation: pausePulse 1.4s ease-in-out infinite;
-    }
-    .pause-card p {
-        font-size: 11.5px;
-        color: #d8d8d8;
-        margin-bottom: 14px;
-        line-height: 1.5;
-    }
-    .pause-card button {
-        padding: 8px 22px;
-        font-size: 12px;
-        font-weight: 700;
-        letter-spacing: 0.4px;
-        border: none;
-        border-radius: 5px;
-        background: var(--accent);
-        color: #fff;
-        cursor: pointer;
-    }
-    .pause-card button:hover { filter: brightness(1.1); }
-    @keyframes pauseFade { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes pausePop {
-        from { transform: scale(0.94); opacity: 0; }
-        to   { transform: scale(1);    opacity: 1; }
-    }
-    @keyframes pausePulse {
-        0%, 100% { opacity: 1; }
-        50%      { opacity: 0.45; }
-    }
-
-    /* ---------- About modal ---------- */
-    .about-content {
-        max-width: 470px;
-        padding: 0;
-        overflow: hidden;
-    }
-    .about-header {
-        position: relative;
-        padding: 20px 24px 16px;
-        text-align: center;
-        color: #fff;
-        background: linear-gradient(135deg, var(--titlebar) 0%, var(--accent) 140%);
-    }
-    .about-header .close {
-        top: 8px;
-        right: 12px;
-        font-size: 20px;
-        color: rgba(255, 255, 255, 0.78);
-    }
-    .about-header .close:hover { color: #fff; }
-    .about-header .about-logo {
-        font-size: 28px;
-        line-height: 1;
-        margin-bottom: 8px;
-    }
-    .about-header h2 {
-        display: inline-block;
-        margin: 0;
-        font-size: 20px;
-        font-weight: 700;
-        letter-spacing: 0.6px;
-        color: #fff;
-    }
-    .about-version {
-        display: inline-block;
-        margin-left: 6px;
-        padding: 1px 7px;
-        font-size: 9.5px;
-        font-weight: 600;
-        letter-spacing: 0.4px;
-        vertical-align: middle;
-        border: 1px solid rgba(255, 255, 255, 0.4);
-        border-radius: 999px;
-        background: rgba(255, 255, 255, 0.2);
-    }
-    .about-header .about-tagline {
-        margin: 7px 0 0;
-        font-size: 10px;
-        line-height: 1.45;
-        color: rgba(255, 255, 255, 0.88);
-    }
-    .about-body {
-        padding: 14px 20px 6px;
-        max-height: 58vh;
-        overflow-y: auto;
-    }
-    .about-section { margin-bottom: 13px; }
-    .about-section:last-child { margin-bottom: 4px; }
-    .about-section h4 {
-        margin-bottom: 4px;
-        font-size: 9.5px;
-        font-weight: 700;
-        letter-spacing: 0.6px;
-        text-transform: uppercase;
-        color: var(--accent);
-    }
-    .about-section p {
-        margin-bottom: 5px;
-        font-size: 10.5px;
-        line-height: 1.5;
-        color: var(--text);
-    }
-    .about-section p:last-child { margin-bottom: 0; }
-    .about-section a { color: var(--accent); text-decoration: none; }
-    .about-section a:hover { text-decoration: underline; }
-    .about-disclaimer {
-        padding: 9px 11px;
-        border-left: 3px solid var(--danger);
-        border-radius: 0 4px 4px 0;
-        background: rgba(128, 128, 128, 0.12);
-    }
-    .about-disclaimer h4 { color: var(--danger); }
-    .about-footer {
-        display: flex;
-        justify-content: flex-end;
-        padding: 10px 20px 14px;
-        border-top: 1px solid var(--border);
-        background: var(--menu-bg);
-    }
-
-    ::-webkit-scrollbar { width: 8px; height: 8px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
-    ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
-</style>
-</head>
-<body>
-<div class="app">
-    <div class="titlebar">
-        <span>HaemCount</span>
-        <span class="close" onclick="confirmReset()" title="Reset all counts">✕</span>
-    </div>
-
-    <div class="menu">
-        <span onclick="copyOutput()">Copy</span>
-        <span onclick="confirmReset()">Reset</span>
-        <span onclick="openBacklog()">Backlog</span>
-        <span onclick="openModal('preferencesModal')">Preferences</span>
-        <span onclick="openModal('keysModal')">Customize Keys</span>
-        <span onclick="openModal('aboutModal')">About</span>
-    </div>
-
-    <div class="main" id="mainArea">
-        <!-- Top: parameters (full width now that the floating Other box is gone) -->
-        <div class="top-section" data-section="params">
-            <div class="params-grid">
-                <label for="hgb">Haemoglobin</label>
-                <div class="param-field">
-                    <input type="number" id="hgb" value="12" step="0.1" min="0">
-                    <span class="unit">g/dL</span>
-                </div>
-
-                <label for="mcv">Mean Corpuscular Volume</label>
-                <div class="param-field">
-                    <input type="number" id="mcv" value="82" step="0.1" min="0">
-                    <span class="unit">fL</span>
-                </div>
-
-                <label for="wbc">White blood cells</label>
-                <div class="param-field">
-                    <input type="number" id="wbc" value="9" step="0.1" min="0">
-                    <span class="unit">×10⁹/L</span>
-                </div>
-
-                <label for="plt">Platelets</label>
-                <div class="param-field">
-                    <input type="number" id="plt" value="460" step="1" min="0">
-                    <span class="unit">×10⁹/L</span>
-                </div>
-            </div>
-        </div>
-
-        <!-- Differential grid (12 cells + mode selector) -->
-        <div class="diff-grid" id="diffGrid" data-section="diff"></div>
-
-        <!-- Histogram -->
-        <div class="hist-panel" data-section="hist">
-            <div class="hist-container">
-                <canvas id="histChart"></canvas>
-            </div>
-        </div>
-
-        <!-- Output preview -->
-        <div class="output-panel" data-section="output">
-            <div class="output-header">Clipboard output preview (Press Enter to copy):</div>
-            <div class="output-box" id="outputBox" onclick="copyOutput()" title="Click to copy to clipboard"></div>
-        </div>
-    </div>
-
-    <div class="statusbar">
-        <span>Total cells counted: <strong id="totalCount">0</strong></span>
-        <span>HaemCount v1.0</span>
-    </div>
-</div>
-
-<!-- Paused overlay (auto-dismisses when window regains focus) -->
-<div class="pause-overlay" id="pauseOverlay" onclick="resumeCounting()">
-    <div class="pause-card">
-        <div class="pause-icon">⏸</div>
-        <h1>PAUSED</h1>
-        <p>Counting is paused because this window lost focus.<br>
-           Focus this window to resume automatically.</p>
-        <button type="button">Resume Counting</button>
-    </div>
-</div>
-
-<!-- Backlog -->
-<div id="backlogModal" class="modal">
-    <div class="modal-content" style="max-width: 560px;">
-        <span class="close" onclick="closeModal('backlogModal')">&times;</span>
-        <h2>Backlog</h2>
-
-        <div class="pref-section">
-            <h4>Save Current</h4>
-            <div class="backlog-save-row">
-                <input type="text" id="backlogLabelInput" placeholder="Label (e.g., Patient A)"
-                       maxlength="60"
-                       onkeydown="if(event.key==='Enter'){event.preventDefault();saveCurrentToBacklog();}">
-                <button onclick="saveCurrentToBacklog()">Save</button>
-            </div>
-            <p style="margin-top: 6px;">Saves the current counts, blood parameters, sample type and the Other label.</p>
-        </div>
-
-        <div class="pref-section">
-            <h4>Saved Entries</h4>
-            <div id="backlogList" class="backlog-list"></div>
-        </div>
-
-        <div class="backlog-footer">
-            <button class="secondary" onclick="confirmClearBacklog()">Clear All</button>
-            <button onclick="closeModal('backlogModal')">Close</button>
-        </div>
-    </div>
-</div>
-
-<!-- Preferences -->
-<div id="preferencesModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="closeModal('preferencesModal')">&times;</span>
-        <h2>Preferences</h2>
-        <div class="pref-section">
-            <h4>Theme</h4>
-            <select id="themeSelect" onchange="applyTheme(this.value)">
-                <option value="light">Light</option>
-                <option value="dark">Dark</option>
-                <option value="solarizedLight">Solarized Light</option>
-                <option value="solarizedDark">Solarized Dark</option>
-                <option value="sepia">Sepia</option>
-            </select>
-        </div>
-        <div class="pref-section">
-            <h4>Behavior</h4>
-            <label class="pref-check">
-                <input type="checkbox" id="pauseOnBlurCheck" onchange="setPauseOnBlur(this.checked)">
-                Show pause overlay when this window loses focus
-            </label>
-        </div>
-        <div class="pref-section">
-            <h4>Volume</h4>
-            <div class="volume-row">
-                <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="0.5" oninput="updateVolume(this.value)">
-                <span id="volDisplay" style="min-width: 34px; text-align: right;">50%</span>
-            </div>
-        </div>
-        <div class="pref-section">
-            <h4>Custom Sounds</h4>
-            <div class="sound-row">
-                <label>Normal beep:</label>
-                <input type="file" accept="audio/*" onchange="loadSound(this, 'normal')">
-                <button class="secondary" onclick="testSound('normal')" title="Test">▶</button>
-                <button class="secondary" onclick="resetSound('normal')" title="Reset">↺</button>
-            </div>
-            <div class="sound-row">
-                <label>Century beep:</label>
-                <input type="file" accept="audio/*" onchange="loadSound(this, 'century')">
-                <button class="secondary" onclick="testSound('century')" title="Test">▶</button>
-                <button class="secondary" onclick="resetSound('century')" title="Reset">↺</button>
-            </div>
-        </div>
-        <div class="pref-section">
-            <h4>Layout</h4>
-            <div id="layoutList"></div>
-        </div>
-        <button onclick="closeModal('preferencesModal')">Close</button>
-    </div>
-</div>
-
-<!-- Customize keys -->
-<div id="keysModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="closeModal('keysModal')">&times;</span>
-        <h2>Customize Keys</h2>
-        <p>Click a field and press a key to assign. Press Backspace to clear.</p>
-        <div id="keybindList"></div>
-        <button onclick="saveKeybinds()" style="margin-top: 10px;">Save Keybinds</button>
-    </div>
-</div>
-
-<!-- About -->
-<div id="aboutModal" class="modal">
-    <div class="modal-content about-content">
-        <div class="about-header">
-            <span class="close" onclick="closeModal('aboutModal')">&times;</span>
-            <div class="about-logo">🩸</div>
-            <h2>HaemCount</h2><span class="about-version">v1.0</span>
-            <p class="about-tagline">A web reimplementation of the HEMCOUNT differential cell counter</p>
-        </div>
-
-        <div class="about-body">
-            <div class="about-section">
-                <h4>Copyright</h4>
-                <p>© 2026 Tiffany Lau. All rights reserved.</p>
-            </div>
-
-            <div class="about-section">
-                <h4>Credits</h4>
-                <p>Inspired by the original <strong>HEMCOUNT</strong> by Nelson Chan
-                   (<a href="https://github.com/nelsonchanhk/HEMCOUNT" target="_blank" rel="noopener">@nelsonchanhk</a>).</p>
-            </div>
-
-            <div class="about-section">
-                <h4>License</h4>
-                <p>GNU General Public License v3.0 (GPLv3).</p>
-                <p>This program comes with <strong>ABSOLUTELY NO WARRANTY</strong>. You are welcome to
-                   redistribute it under certain conditions. See the LICENSE file for details.</p>
-            </div>
-
-            <div class="about-section about-disclaimer">
-                <h4>Disclaimer</h4>
-                <p>For educational and research support only. <strong>Not a medical device.</strong></p>
-                <p>Must not be used as the sole basis for clinical diagnosis or patient management. All clinical
-                   decisions must be made by qualified healthcare professionals using validated laboratory systems.</p>
-            </div>
-        </div>
-
-        <div class="about-footer">
-            <button onclick="closeModal('aboutModal')">Close</button>
-        </div>
-    </div>
-</div>
-
-<div class="toast" id="toast">Copied!</div>
-
-<script>
-// ---------- Cell definitions ----------
-const ALL_CELLS = [
-    { key: 'eos',    dispName: 'Eosinophil',    name: 'eosinophils',    short: 'Eos',    type: 'myeloid'   },
-    { key: 'baso',   dispName: 'Basophil',      name: 'basophils',      short: 'Baso',   type: 'myeloid'   },
-    { key: 'other',  dispName: 'Other',         name: 'other cells',    short: 'Other',  type: 'other'     },
-    { key: 'mono',   dispName: 'Monocyte',      name: 'monocytes',      short: 'Mono',   type: 'mono'      },
-    { key: 'band',   dispName: 'Neutrophil',    name: 'neutrophils',    short: 'Neu',    type: 'myeloid'   },
-    { key: 'lym',    dispName: 'Lymphocyte',    name: 'lymphocytes',    short: 'Lym',    type: 'lymphoid'  },
-    { key: 'plasma', dispName: 'Plasma cell',   name: 'plasma cells',   short: 'Plasma', type: 'other'     },
-    { key: 'promy',  dispName: 'Promyelocyte',  name: 'promyelocytes',  short: 'Pro',    type: 'myeloid'   },
-    { key: 'mye',    dispName: 'Myelocyte',     name: 'myelocytes',     short: 'Mye',    type: 'myeloid'   },
-    { key: 'meta',   dispName: 'Metamyelocyte', name: 'metamyelocytes', short: 'Meta',   type: 'myeloid'   },
-    { key: 'blast',  dispName: 'Blast',         name: 'blasts',         short: 'Blast',  type: 'myeloid'   },
-    { key: 'nRBC',   dispName: 'Nucleated RBC', name: 'nRBCs',          short: 'nRBC',   type: 'erythroid' },
-];
-
-const HIST_ORDER = ['blast','promy','mye','meta','band','lym','mono','other','eos','baso','plasma','nRBC'];
-
-const THEMES = {
-    light: {
-        bg: '#ebebeb', panel: '#ffffff', border: '#c0c0c0',
-        accent: '#2c7be5', danger: '#e74c3c', text: '#1e1e1e', muted: '#6b6b6b',
-        titlebar: '#3a3a3a', titlebarText: '#ffffff',
-        menuBg: '#f5f5f5', inputBg: '#ffffff',
-        toastBg: '#2b2b2b', toastText: '#ffffff'
-    },
-    dark: {
-        bg: '#161616', panel: '#232323', border: '#3d3d3d',
-        accent: '#5aa3ff', danger: '#ff6b6b', text: '#e4e4e4', muted: '#9a9a9a',
-        titlebar: '#000000', titlebarText: '#f0f0f0',
-        menuBg: '#1c1c1c', inputBg: '#161616',
-        toastBg: '#4a4a4a', toastText: '#ffffff'
-    },
-    solarizedLight: {
-        bg: '#fdf6e3', panel: '#eee8d5', border: '#b5ad95',
-        accent: '#268bd2', danger: '#dc322f', text: '#073642', muted: '#657b83',
-        titlebar: '#002b36', titlebarText: '#eee8d5',
-        menuBg: '#f5efdc', inputBg: '#e2dbc0',
-        toastBg: '#002b36', toastText: '#eee8d5'
-    },
-    solarizedDark: {
-        bg: '#002b36', panel: '#073642', border: '#586e75',
-        accent: '#268bd2', danger: '#dc322f', text: '#eee8d5', muted: '#93a1a1',
-        titlebar: '#001f27', titlebarText: '#eee8d5',
-        menuBg: '#073642', inputBg: '#002b36',
-        toastBg: '#001f27', toastText: '#eee8d5'
-    },
-    sepia: {
-        bg: '#f4ecd8', panel: '#fdf6e3', border: '#d3c7a8',
-        accent: '#a67c00', danger: '#b84a3b', text: '#3a3020', muted: '#7a6a4a',
-        titlebar: '#5a4a2a', titlebarText: '#fdf6e3',
-        menuBg: '#ede4c8', inputBg: '#fdf6e3',
-        toastBg: '#5a4a2a', toastText: '#fdf6e3'
-    }
-};
-
-let counts = {};
-let mode = 'peripheral';
-let chart = null;
-let globalVolume = 0.5;
-let audioCtx = null;
-let currentTheme = 'light';
-let customSounds = { normal: null, century: null };
-let otherLabelValue = 'other';
-
-let layoutOrder = ['params', 'diff', 'hist', 'output'];
-let layoutVisible = { params: true, diff: true, hist: true, output: true };
-const SECTION_NAMES = {
-    params: 'Blood Parameters',
-    diff: 'Differential Count',
-    hist: 'Histogram',
-    output: 'Output Preview'
-};
-
-// ---------- Default keybinds ----------
-const DEFAULT_KEY_MAP = {
-    '0': 'lym',   '.': 'band',  '1': 'baso',  '2': 'eos',   '3': 'mono',
-    '4': 'promy', '5': 'mye',   '6': 'meta',  '7': 'other', '8': 'plasma',
-    '9': 'nRBC',  '+': 'blast'
-};
-let keyMap = Object.assign({}, DEFAULT_KEY_MAP);
-
-// ---------- Preferences storage (persists across reloads) ----------
-const PREFS_KEY = 'haemcount.prefs.v1';
-
-function savePrefs() {
-    try {
-        localStorage.setItem(PREFS_KEY, JSON.stringify({
-            volume: globalVolume,
-            theme: currentTheme,
-            keybinds: keyMap,
-            pauseOnBlur: pauseOnBlur
-        }));
-    } catch (e) {
-        console.warn('Could not save preferences', e);
-    }
-}
-
-function loadPrefs() {
-    let prefs = null;
-    try {
-        const raw = localStorage.getItem(PREFS_KEY);
-        prefs = raw ? JSON.parse(raw) : null;
-    } catch (e) {
-        console.warn('Could not read preferences', e);
-    }
-    if (!prefs || typeof prefs !== 'object') prefs = {};
-
-    // Volume
-    const v = parseFloat(prefs.volume);
-    globalVolume = isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5;
-
-    // Theme
-    currentTheme = Object.prototype.hasOwnProperty.call(THEMES, prefs.theme) ? prefs.theme : 'light';
-
-    // Keybinds (validated, falls back to defaults)
-    keyMap = Object.assign({}, DEFAULT_KEY_MAP);
-    if (prefs.keybinds && typeof prefs.keybinds === 'object') {
-        const validCells = ALL_CELLS.map(c => c.key);
-        const cleaned = {};
-        Object.keys(prefs.keybinds).forEach(k => {
-            const cellKey = prefs.keybinds[k];
-            if (typeof k === 'string' && k.length === 1 && validCells.indexOf(cellKey) !== -1) {
-                cleaned[k] = cellKey;
+            .top-section,
+            .diff-grid {
+                grid-template-columns: 1fr 1fr;
             }
+        }
+
+        @media (max-width: 420px) {
+
+            .top-section,
+            .diff-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .top-section {
+            flex-shrink: 0;
+        }
+
+        /* Parameters grid — spans the full width now that the "Other" input is gone */
+        .params-grid {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: max-content 1fr;
+            gap: 3px 8px;
+            align-items: center;
+            font-size: 11.5px;
+        }
+
+        .params-grid>label {
+            color: var(--text);
+            white-space: nowrap;
+            cursor: pointer;
+        }
+
+        /* Field wrapper keeps the unit glued to its input box */
+        .param-field {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            min-width: 0;
+            justify-self: start;
+        }
+
+        .param-field input[type="number"] {
+            width: 92px;
+            flex: 0 0 auto;
+            padding: 2px 6px;
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 11px;
+            text-align: right;
+            height: 20px;
+        }
+
+        .param-field .unit {
+            font-size: 10px;
+            color: var(--text);
+            white-space: nowrap;
+        }
+
+        /* Differential cells */
+        .diff-cell {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            padding: 3px 5px;
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--menu-bg);
+            min-height: 26px;
+            overflow: hidden;
+        }
+
+        .diff-cell .cell-label {
+            flex: 1 1 auto;
+            font-size: 10px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+            color: var(--text);
+        }
+
+        /* Inline-editable "Other" name inside its diff cell */
+        /* Inline-editable "Other" name inside its diff cell */
+        .diff-cell .editable-label {
+            outline: none;
+            padding: 0 1px;
+            border-radius: 2px;
+            /* The dashed underline is now always visible so the field reads as editable */
+            border-bottom: 1px dashed var(--muted);
+            cursor: text;
+            transition: background 0.12s, border-color 0.12s;
+        }
+
+        /* Small pencil glyph pinned after the label as a visual "you can edit this" cue */
+        .diff-cell .editable-label::after {
+            content: '✎';
+            margin-left: 3px;
+            font-size: 8px;
+            line-height: 1;
+            color: var(--accent);
+            opacity: 0.7;
+            vertical-align: 1px;
+            pointer-events: none;
+            /* clicks still land on the editable span */
+            transition: opacity 0.12s;
+        }
+
+        .diff-cell .editable-label:hover {
+            border-bottom-color: var(--accent);
+            background: var(--input-bg);
+        }
+
+        .diff-cell .editable-label:hover::after {
+            opacity: 1;
+        }
+
+        .diff-cell .editable-label:focus {
+            border-bottom-color: var(--accent);
+            background: var(--input-bg);
+            box-shadow: 0 0 0 1px var(--accent);
+        }
+
+        .diff-cell .editable-label:focus::after {
+            opacity: 1;
+        }
+
+        .diff-cell .count-wrap {
+            display: flex;
+            align-items: stretch;
+            flex-shrink: 0;
+        }
+
+        .diff-cell .count-box {
+            width: 30px;
+            padding: 1px 3px;
+            border: 1px solid var(--border);
+            border-right: none;
+            border-radius: 3px 0 0 3px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 10.5px;
+            font-weight: 700;
+            text-align: center;
+            outline: none;
+            cursor: text;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 20px;
+        }
+
+        .diff-cell .count-box:focus {
+            outline: 1.5px solid var(--accent);
+            outline-offset: -1.5px;
+        }
+
+        .diff-cell .spinner {
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--border);
+            border-radius: 0 3px 3px 0;
+            background: var(--panel);
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .diff-cell .spinner button {
+            width: 16px;
+            height: 10px;
+            border: none;
+            background: var(--panel);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 6.5px;
+            line-height: 1;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .diff-cell .spinner button:hover {
+            background: var(--border);
+        }
+
+        .diff-cell .spinner button.up {
+            border-bottom: 1px solid var(--border);
+        }
+
+        /* Percentage immediately adjacent to the count box */
+        .diff-cell .pct {
+            font-size: 9.5px;
+            color: var(--muted);
+            text-align: right;
+            flex-shrink: 0;
+            min-width: 28px;
+            padding-left: 2px;
+        }
+
+        /* Mode radio cell */
+        .mode-cell {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 4px;
+            padding: 3px 5px;
+            font-size: 10.5px;
+        }
+
+        .mode-cell label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .mode-cell input[type="radio"] {
+            width: 12px;
+            height: 12px;
+            margin: 0;
+        }
+
+        .mode-cell .ratio {
+            margin-top: 2px;
+            font-size: 9.5px;
+            color: var(--muted);
+        }
+
+        .mode-cell .ratio strong {
+            color: var(--accent);
+        }
+
+        /* Histogram panel */
+        .hist-panel {
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--panel);
+            padding: 4px 6px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 90px;
+        }
+
+        .hist-container {
+            position: relative;
+            flex: 1;
+            width: 100%;
+            min-height: 70px;
+        }
+
+        /* Output panel */
+        .output-panel {
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--panel);
+            padding: 4px 6px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 80px;
+        }
+
+        .output-header {
+            font-size: 10.5px;
+            color: var(--muted);
+            margin-bottom: 3px;
+            font-style: italic;
+            flex-shrink: 0;
+        }
+
+        .output-box {
+            flex: 1;
+            padding: 4px 6px;
+            background: var(--panel);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 9.5px;
+            white-space: pre-wrap;
+            line-height: 1.35;
+            overflow-y: auto;
+            cursor: pointer;
+            transition: background 0.12s, border-color 0.12s;
+            min-height: 0;
+        }
+
+        .output-box:hover {
+            background: var(--menu-bg);
+            border-color: var(--accent);
+        }
+
+        .output-box:active {
+            background: var(--border);
+        }
+
+        /* Status bar */
+        .statusbar {
+            padding: 4px 12px;
+            background: var(--menu-bg);
+            border-top: 1px solid var(--border);
+            font-size: 11.5px;
+            color: var(--text);
+            display: flex;
+            justify-content: space-between;
+            flex-shrink: 0;
+            gap: 8px;
+        }
+
+        .statusbar strong {
+            color: var(--text);
+        }
+
+        /* Modals */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.42);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.open {
+            display: flex;
+        }
+
+        .modal-content {
+            background-color: var(--panel);
+            color: var(--text);
+            padding: 16px 18px;
+            border: 1px solid var(--border);
+            width: 90%;
+            max-width: 420px;
+            border-radius: 6px;
+            position: relative;
+            box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28);
+            max-height: 88vh;
+            overflow-y: auto;
+            font-size: 11px;
+        }
+
+        .modal-content .close {
+            position: absolute;
+            right: 10px;
+            top: 6px;
+            font-size: 18px;
+            cursor: pointer;
+            color: var(--muted);
+            line-height: 1;
+        }
+
+        .modal-content .close:hover {
+            color: var(--text);
+        }
+
+        .modal-content h2 {
+            margin-bottom: 10px;
+            font-size: 12px;
+            color: var(--text);
+        }
+
+        .modal-content p {
+            margin-bottom: 6px;
+            font-size: 10px;
+            line-height: 1.4;
+            color: var(--muted);
+        }
+
+        .modal-content button {
+            padding: 4px 10px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 10.5px;
+        }
+
+        .modal-content button:hover {
+            filter: brightness(0.92);
+        }
+
+        .modal-content button.secondary {
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .modal-content button.secondary:hover {
+            background: var(--border);
+        }
+
+        .pref-section {
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .pref-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .pref-section h4 {
+            font-size: 9.5px;
+            margin-bottom: 5px;
+            color: var(--text);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 700;
+        }
+
+        .pref-section select {
+            padding: 2px 6px;
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 10.5px;
+            width: 100%;
+        }
+
+        .pref-check {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 10.5px;
+            color: var(--text);
+        }
+
+        .pref-check input[type="checkbox"] {
+            width: 14px;
+            height: 14px;
+            margin: 0;
+        }
+
+        .volume-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 10px;
+        }
+
+        .volume-row input[type="range"] {
+            flex: 1;
+        }
+
+        .sound-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 4px;
+            font-size: 10px;
+        }
+
+        .sound-row label {
+            flex: 1;
+        }
+
+        .sound-row input[type="file"] {
+            max-width: 110px;
+            font-size: 8.5px;
+            color: var(--text);
+        }
+
+        .sound-row button {
+            padding: 2px 6px;
+            font-size: 9px;
+        }
+
+        .layout-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 10.5px;
+        }
+
+        .layout-row:last-child {
+            border-bottom: none;
+        }
+
+        .layout-row span {
+            flex: 1;
+        }
+
+        .layout-row button {
+            padding: 1px 6px;
+            font-size: 9.5px;
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .layout-row button:hover:not(:disabled) {
+            background: var(--border);
+        }
+
+        .layout-row button:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .keybind-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 3px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 10.5px;
+        }
+
+        .keybind-row:last-child {
+            border-bottom: none;
+        }
+
+        .keybind-row label {
+            flex: 1;
+        }
+
+        .keybind-row input {
+            width: 32px;
+            text-align: center;
+            padding: 1px;
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-family: monospace;
+            font-size: 11px;
+        }
+
+        .keybind-row input:focus {
+            outline: 2px solid var(--accent);
+        }
+
+        /* ---------- Backlog ---------- */
+        .backlog-save-row {
+            display: flex;
+            gap: 6px;
+            align-items: stretch;
+        }
+
+        .backlog-save-row input {
+            flex: 1;
+            min-width: 0;
+            padding: 4px 7px;
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 11px;
+            height: 24px;
+        }
+
+        .backlog-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-height: 42vh;
+            overflow-y: auto;
+            padding-right: 2px;
+        }
+
+        .backlog-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--menu-bg);
+        }
+
+        .backlog-item .info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .backlog-item .info .label {
+            font-weight: 700;
+            font-size: 11px;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .backlog-item .info .meta {
+            font-size: 9.5px;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 1px;
+        }
+
+        .backlog-item button {
+            padding: 3px 9px;
+            font-size: 9.5px;
+            flex-shrink: 0;
+        }
+
+        .backlog-empty {
+            font-size: 10px;
+            color: var(--muted);
+            font-style: italic;
+            padding: 8px 0;
+            text-align: center;
+        }
+
+        .backlog-footer {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border);
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--toast-bg);
+            color: var(--toast-text);
+            padding: 6px 14px;
+            border-radius: 4px;
+            font-size: 10.5px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 2000;
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+
+        /* ---------- Paused overlay ---------- */
+        body.paused .app {
+            filter: grayscale(0.85) blur(2px);
+            opacity: 0.5;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .pause-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 1500;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(10, 14, 22, 0.62);
+            -webkit-backdrop-filter: blur(5px) grayscale(0.6);
+            backdrop-filter: blur(5px) grayscale(0.6);
+            cursor: pointer;
+            animation: pauseFade 0.18s ease-out;
+        }
+
+        .pause-overlay.show {
+            display: flex;
+        }
+
+        .pause-card {
+            text-align: center;
+            padding: 26px 40px;
+            border-radius: 12px;
+            background: rgba(18, 22, 30, 0.9);
+            border: 2px solid rgba(255, 255, 255, 0.28);
+            box-shadow: 0 14px 46px rgba(0, 0, 0, 0.55);
+            color: #fff;
+            max-width: 90vw;
+            animation: pausePop 0.2s ease-out;
+        }
+
+        .pause-icon {
+            font-size: 36px;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .pause-card h1 {
+            font-size: 32px;
+            letter-spacing: 8px;
+            margin-bottom: 8px;
+            color: #ffd166;
+            text-shadow: 0 0 18px rgba(255, 209, 102, 0.45);
+            animation: pausePulse 1.4s ease-in-out infinite;
+        }
+
+        .pause-card p {
+            font-size: 11.5px;
+            color: #d8d8d8;
+            margin-bottom: 14px;
+            line-height: 1.5;
+        }
+
+        .pause-card button {
+            padding: 8px 22px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            border: none;
+            border-radius: 5px;
+            background: var(--accent);
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .pause-card button:hover {
+            filter: brightness(1.1);
+        }
+
+        @keyframes pauseFade {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes pausePop {
+            from {
+                transform: scale(0.94);
+                opacity: 0;
+            }
+
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        @keyframes pausePulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.45;
+            }
+        }
+
+        /* ---------- About modal ---------- */
+        .about-content {
+            max-width: 470px;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .about-header {
+            position: relative;
+            padding: 20px 24px 16px;
+            text-align: center;
+            color: #fff;
+            background: linear-gradient(135deg, var(--titlebar) 0%, var(--accent) 140%);
+        }
+
+        .about-header .close {
+            top: 8px;
+            right: 12px;
+            font-size: 20px;
+            color: rgba(255, 255, 255, 0.78);
+        }
+
+        .about-header .close:hover {
+            color: #fff;
+        }
+
+        .about-header .about-logo {
+            font-size: 28px;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .about-header h2 {
+            display: inline-block;
+            margin: 0;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+            color: #fff;
+        }
+
+        .about-version {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 7px;
+            font-size: 9.5px;
+            font-weight: 600;
+            letter-spacing: 0.4px;
+            vertical-align: middle;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .about-header .about-tagline {
+            margin: 7px 0 0;
+            font-size: 10px;
+            line-height: 1.45;
+            color: rgba(255, 255, 255, 0.88);
+        }
+
+        .about-body {
+            padding: 14px 20px 6px;
+            max-height: 58vh;
+            overflow-y: auto;
+        }
+
+        .about-section {
+            margin-bottom: 13px;
+        }
+
+        .about-section:last-child {
+            margin-bottom: 4px;
+        }
+
+        .about-section h4 {
+            margin-bottom: 4px;
+            font-size: 9.5px;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            color: var(--accent);
+        }
+
+        .about-section p {
+            margin-bottom: 5px;
+            font-size: 10.5px;
+            line-height: 1.5;
+            color: var(--text);
+        }
+
+        .about-section p:last-child {
+            margin-bottom: 0;
+        }
+
+        .about-section a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .about-section a:hover {
+            text-decoration: underline;
+        }
+
+        .about-disclaimer {
+            padding: 9px 11px;
+            border-left: 3px solid var(--danger);
+            border-radius: 0 4px 4px 0;
+            background: rgba(128, 128, 128, 0.12);
+        }
+
+        .about-disclaimer h4 {
+            color: var(--danger);
+        }
+
+        .about-footer {
+            display: flex;
+            justify-content: flex-end;
+            padding: 10px 20px 14px;
+            border-top: 1px solid var(--border);
+            background: var(--menu-bg);
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--muted);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <div class="titlebar">
+            <span>HaemCount</span>
+            <span class="close" onclick="confirmReset()" title="Reset all counts">✕</span>
+        </div>
+
+        <div class="menu">
+            <span onclick="copyOutput()">Copy</span>
+            <span onclick="confirmReset()">Reset</span>
+            <span onclick="openBacklog()">Backlog</span>
+            <span onclick="openModal('preferencesModal')">Preferences</span>
+            <span onclick="openModal('keysModal')">Customize Keys</span>
+            <span onclick="openModal('aboutModal')">About</span>
+        </div>
+
+        <div class="main" id="mainArea">
+            <!-- Top: parameters (full width now that the floating Other box is gone) -->
+            <div class="top-section" data-section="params">
+                <div class="params-grid">
+                    <label for="hgb">Haemoglobin</label>
+                    <div class="param-field">
+                        <input type="number" id="hgb" value="12" step="0.1" min="0">
+                        <span class="unit">g/dL</span>
+                    </div>
+
+                    <label for="mcv">Mean Corpuscular Volume</label>
+                    <div class="param-field">
+                        <input type="number" id="mcv" value="82" step="0.1" min="0">
+                        <span class="unit">fL</span>
+                    </div>
+
+                    <label for="wbc">White blood cells</label>
+                    <div class="param-field">
+                        <input type="number" id="wbc" value="9" step="0.1" min="0">
+                        <span class="unit">×10⁹/L</span>
+                    </div>
+
+                    <label for="plt">Platelets</label>
+                    <div class="param-field">
+                        <input type="number" id="plt" value="460" step="1" min="0">
+                        <span class="unit">×10⁹/L</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Differential grid (12 cells + mode selector) -->
+            <div class="diff-grid" id="diffGrid" data-section="diff"></div>
+
+            <!-- Histogram -->
+            <div class="hist-panel" data-section="hist">
+                <div class="hist-container">
+                    <canvas id="histChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Output preview -->
+            <div class="output-panel" data-section="output">
+                <div class="output-header">Clipboard output preview (Press Enter to copy):</div>
+                <div class="output-box" id="outputBox" onclick="copyOutput()" title="Click to copy to clipboard"></div>
+            </div>
+        </div>
+
+        <div class="statusbar">
+            <span>Total cells counted: <strong id="totalCount">0</strong></span>
+            <span>HaemCount v1.0</span>
+        </div>
+    </div>
+
+    <!-- Paused overlay (auto-dismisses when window regains focus) -->
+    <div class="pause-overlay" id="pauseOverlay" onclick="resumeCounting()">
+        <div class="pause-card">
+            <div class="pause-icon">⏸</div>
+            <h1>PAUSED</h1>
+            <p>Counting is paused because this window lost focus.<br>
+                Focus this window to resume automatically.</p>
+            <button type="button">Resume Counting</button>
+        </div>
+    </div>
+
+    <!-- Backlog -->
+    <div id="backlogModal" class="modal">
+        <div class="modal-content" style="max-width: 560px;">
+            <span class="close" onclick="closeModal('backlogModal')">&times;</span>
+            <h2>Backlog</h2>
+
+            <div class="pref-section">
+                <h4>Save Current</h4>
+                <div class="backlog-save-row">
+                    <input type="text" id="backlogLabelInput" placeholder="Label (e.g., Patient A)" maxlength="60"
+                        onkeydown="if(event.key==='Enter'){event.preventDefault();saveCurrentToBacklog();}">
+                    <button onclick="saveCurrentToBacklog()">Save</button>
+                </div>
+                <p style="margin-top: 6px;">Saves the current counts, blood parameters, sample type and the Other label.
+                </p>
+            </div>
+
+            <div class="pref-section">
+                <h4>Saved Entries</h4>
+                <div id="backlogList" class="backlog-list"></div>
+            </div>
+
+            <div class="backlog-footer">
+                <button class="secondary" onclick="confirmClearBacklog()">Clear All</button>
+                <button onclick="closeModal('backlogModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preferences -->
+    <div id="preferencesModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('preferencesModal')">&times;</span>
+            <h2>Preferences</h2>
+            <div class="pref-section">
+                <h4>Theme</h4>
+                <select id="themeSelect" onchange="applyTheme(this.value)">
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                    <option value="solarizedLight">Solarized Light</option>
+                    <option value="solarizedDark">Solarized Dark</option>
+                    <option value="sepia">Sepia</option>
+                </select>
+            </div>
+            <div class="pref-section">
+                <h4>Behavior</h4>
+                <label class="pref-check">
+                    <input type="checkbox" id="pauseOnBlurCheck" onchange="setPauseOnBlur(this.checked)">
+                    Show pause overlay when this window loses focus
+                </label>
+            </div>
+            <div class="pref-section">
+                <h4>Volume</h4>
+                <div class="volume-row">
+                    <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="0.5"
+                        oninput="updateVolume(this.value)">
+                    <span id="volDisplay" style="min-width: 34px; text-align: right;">50%</span>
+                </div>
+            </div>
+            <div class="pref-section">
+                <h4>Custom Sounds</h4>
+                <div class="sound-row">
+                    <label>Normal beep:</label>
+                    <input type="file" accept="audio/*" onchange="loadSound(this, 'normal')">
+                    <button class="secondary" onclick="testSound('normal')" title="Test">▶</button>
+                    <button class="secondary" onclick="resetSound('normal')" title="Reset">↺</button>
+                </div>
+                <div class="sound-row">
+                    <label>Century beep:</label>
+                    <input type="file" accept="audio/*" onchange="loadSound(this, 'century')">
+                    <button class="secondary" onclick="testSound('century')" title="Test">▶</button>
+                    <button class="secondary" onclick="resetSound('century')" title="Reset">↺</button>
+                </div>
+            </div>
+            <div class="pref-section">
+                <h4>Layout</h4>
+                <div id="layoutList"></div>
+            </div>
+            <button onclick="closeModal('preferencesModal')">Close</button>
+        </div>
+    </div>
+
+    <!-- Customize keys -->
+    <div id="keysModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('keysModal')">&times;</span>
+            <h2>Customize Keys</h2>
+            <p>Click a field and press a key to assign. Press Backspace to clear.</p>
+            <div id="keybindList"></div>
+            <button onclick="saveKeybinds()" style="margin-top: 10px;">Save Keybinds</button>
+        </div>
+    </div>
+
+    <!-- About -->
+    <div id="aboutModal" class="modal">
+        <div class="modal-content about-content">
+            <div class="about-header">
+                <span class="close" onclick="closeModal('aboutModal')">&times;</span>
+                <div class="about-logo">🩸</div>
+                <h2>HaemCount</h2><span class="about-version">v1.0</span>
+                <p class="about-tagline">A web reimplementation of the HEMCOUNT differential cell counter</p>
+            </div>
+
+            <div class="about-body">
+                <div class="about-section">
+                    <h4>Copyright</h4>
+                    <p>© 2026 Tiffany Lau. All rights reserved.</p>
+                </div>
+
+                <div class="about-section">
+                    <h4>Credits</h4>
+                    <p>Inspired by the original <strong>HEMCOUNT</strong> by Nelson Chan
+                        (<a href="https://github.com/nelsonchanhk/HEMCOUNT" target="_blank"
+                            rel="noopener">@nelsonchanhk</a>).</p>
+                </div>
+
+                <div class="about-section">
+                    <h4>License</h4>
+                    <p>GNU General Public License v3.0 (GPLv3).</p>
+                    <p>This program comes with <strong>ABSOLUTELY NO WARRANTY</strong>. You are welcome to
+                        redistribute it under certain conditions. See the LICENSE file for details.</p>
+                </div>
+
+                <div class="about-section about-disclaimer">
+                    <h4>Disclaimer</h4>
+                    <p>For educational and research support only. <strong>Not a medical device.</strong></p>
+                    <p>Must not be used as the sole basis for clinical diagnosis or patient management. All clinical
+                        decisions must be made by qualified healthcare professionals using validated laboratory systems.
+                    </p>
+                </div>
+            </div>
+
+            <div class="about-footer">
+                <button onclick="closeModal('aboutModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast">Copied!</div>
+
+    <script>
+        // ---------- Cell definitions ----------
+        const ALL_CELLS = [
+            { key: 'eos', dispName: 'Eosinophil', name: 'eosinophils', short: 'Eos', type: 'myeloid' },
+            { key: 'baso', dispName: 'Basophil', name: 'basophils', short: 'Baso', type: 'myeloid' },
+            { key: 'other', dispName: 'Other', name: 'other cells', short: 'Other', type: 'other' },
+            { key: 'mono', dispName: 'Monocyte', name: 'monocytes', short: 'Mono', type: 'mono' },
+            { key: 'band', dispName: 'Neutrophil', name: 'neutrophils', short: 'Neu', type: 'myeloid' },
+            { key: 'lym', dispName: 'Lymphocyte', name: 'lymphocytes', short: 'Lym', type: 'lymphoid' },
+            { key: 'plasma', dispName: 'Plasma cell', name: 'plasma cells', short: 'Plasma', type: 'other' },
+            { key: 'promy', dispName: 'Promyelocyte', name: 'promyelocytes', short: 'Pro', type: 'myeloid' },
+            { key: 'mye', dispName: 'Myelocyte', name: 'myelocytes', short: 'Mye', type: 'myeloid' },
+            { key: 'meta', dispName: 'Metamyelocyte', name: 'metamyelocytes', short: 'Meta', type: 'myeloid' },
+            { key: 'blast', dispName: 'Blast', name: 'blasts', short: 'Blast', type: 'myeloid' },
+            { key: 'nRBC', dispName: 'Nucleated RBC', name: 'nRBCs', short: 'nRBC', type: 'erythroid' },
+        ];
+
+        const HIST_ORDER = ['blast', 'promy', 'mye', 'meta', 'band', 'lym', 'mono', 'other', 'eos', 'baso', 'plasma', 'nRBC'];
+
+        const THEMES = {
+            light: {
+                bg: '#ebebeb', panel: '#ffffff', border: '#c0c0c0',
+                accent: '#2c7be5', danger: '#e74c3c', text: '#1e1e1e', muted: '#6b6b6b',
+                titlebar: '#3a3a3a', titlebarText: '#ffffff',
+                menuBg: '#f5f5f5', inputBg: '#ffffff',
+                toastBg: '#2b2b2b', toastText: '#ffffff'
+            },
+            dark: {
+                bg: '#161616', panel: '#232323', border: '#3d3d3d',
+                accent: '#5aa3ff', danger: '#ff6b6b', text: '#e4e4e4', muted: '#9a9a9a',
+                titlebar: '#000000', titlebarText: '#f0f0f0',
+                menuBg: '#1c1c1c', inputBg: '#161616',
+                toastBg: '#4a4a4a', toastText: '#ffffff'
+            },
+            solarizedLight: {
+                bg: '#fdf6e3', panel: '#eee8d5', border: '#b5ad95',
+                accent: '#268bd2', danger: '#dc322f', text: '#073642', muted: '#657b83',
+                titlebar: '#002b36', titlebarText: '#eee8d5',
+                menuBg: '#f5efdc', inputBg: '#e2dbc0',
+                toastBg: '#002b36', toastText: '#eee8d5'
+            },
+            solarizedDark: {
+                bg: '#002b36', panel: '#073642', border: '#586e75',
+                accent: '#268bd2', danger: '#dc322f', text: '#eee8d5', muted: '#93a1a1',
+                titlebar: '#001f27', titlebarText: '#eee8d5',
+                menuBg: '#073642', inputBg: '#002b36',
+                toastBg: '#001f27', toastText: '#eee8d5'
+            },
+            sepia: {
+                bg: '#f4ecd8', panel: '#fdf6e3', border: '#d3c7a8',
+                accent: '#a67c00', danger: '#b84a3b', text: '#3a3020', muted: '#7a6a4a',
+                titlebar: '#5a4a2a', titlebarText: '#fdf6e3',
+                menuBg: '#ede4c8', inputBg: '#fdf6e3',
+                toastBg: '#5a4a2a', toastText: '#fdf6e3'
+            }
+        };
+
+        let counts = {};
+        let mode = 'peripheral';
+        let chart = null;
+        let globalVolume = 0.5;
+        let audioCtx = null;
+        let currentTheme = 'light';
+        let customSounds = { normal: null, century: null };
+        let otherLabelValue = 'other';
+
+        let layoutOrder = ['params', 'diff', 'hist', 'output'];
+        let layoutVisible = { params: true, diff: true, hist: true, output: true };
+        const SECTION_NAMES = {
+            params: 'Blood Parameters',
+            diff: 'Differential Count',
+            hist: 'Histogram',
+            output: 'Output Preview'
+        };
+
+        // ---------- Default keybinds ----------
+        const DEFAULT_KEY_MAP = {
+            '0': 'lym', '.': 'band', '1': 'baso', '2': 'eos', '3': 'mono',
+            '4': 'promy', '5': 'mye', '6': 'meta', '7': 'other', '8': 'plasma',
+            '9': 'nRBC', '+': 'blast'
+        };
+        let keyMap = Object.assign({}, DEFAULT_KEY_MAP);
+
+        // ---------- Preferences storage (persists across reloads) ----------
+        const PREFS_KEY = 'haemcount.prefs.v1';
+
+        function savePrefs() {
+            try {
+                localStorage.setItem(PREFS_KEY, JSON.stringify({
+                    volume: globalVolume,
+                    theme: currentTheme,
+                    keybinds: keyMap,
+                    pauseOnBlur: pauseOnBlur
+                }));
+            } catch (e) {
+                console.warn('Could not save preferences', e);
+            }
+        }
+
+        function loadPrefs() {
+            let prefs = null;
+            try {
+                const raw = localStorage.getItem(PREFS_KEY);
+                prefs = raw ? JSON.parse(raw) : null;
+            } catch (e) {
+                console.warn('Could not read preferences', e);
+            }
+            if (!prefs || typeof prefs !== 'object') prefs = {};
+
+            // Volume
+            const v = parseFloat(prefs.volume);
+            globalVolume = isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5;
+
+            // Theme
+            currentTheme = Object.prototype.hasOwnProperty.call(THEMES, prefs.theme) ? prefs.theme : 'light';
+
+            // Keybinds (validated, falls back to defaults)
+            keyMap = Object.assign({}, DEFAULT_KEY_MAP);
+            if (prefs.keybinds && typeof prefs.keybinds === 'object') {
+                const validCells = ALL_CELLS.map(c => c.key);
+                const cleaned = {};
+                Object.keys(prefs.keybinds).forEach(k => {
+                    const cellKey = prefs.keybinds[k];
+                    if (typeof k === 'string' && k.length === 1 && validCells.indexOf(cellKey) !== -1) {
+                        cleaned[k] = cellKey;
+                    }
+                });
+                keyMap = cleaned;
+            }
+
+            // Pause-on-blur
+            pauseOnBlur = !!prefs.pauseOnBlur;
+        }
+
+        const SHIFT_MAP = {
+            '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
+            '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
+            '>': '.'
+        };
+
+        // ---------- Backlog storage ----------
+        const BACKLOG_KEY = 'haemcount.backlog.v1';
+
+        function readBacklog() {
+            try {
+                const raw = localStorage.getItem(BACKLOG_KEY);
+                if (!raw) return [];
+                const arr = JSON.parse(raw);
+                return Array.isArray(arr) ? arr : [];
+            } catch (e) {
+                console.warn('Could not read backlog', e);
+                return [];
+            }
+        }
+
+        function writeBacklog(arr) {
+            try {
+                localStorage.setItem(BACKLOG_KEY, JSON.stringify(arr));
+                return true;
+            } catch (e) {
+                console.warn('Could not write backlog', e);
+                showToast('Could not save backlog');
+                return false;
+            }
+        }
+
+        function computeEntryTotal(entry) {
+            let total = 0;
+            const c = entry.counts || {};
+            ALL_CELLS.forEach(cell => {
+                if (entry.mode === 'peripheral' && cell.key === 'nRBC') return;
+                total += c[cell.key] || 0;
+            });
+            return total;
+        }
+
+        function openBacklog() {
+            renderBacklogList();
+            const input = document.getElementById('backlogLabelInput');
+            if (input) {
+                const backlog = readBacklog();
+                input.value = '';
+                input.placeholder = `Label (e.g., Sample ${backlog.length + 1})`;
+            }
+            openModal('backlogModal');
+        }
+
+        function saveCurrentToBacklog() {
+            const input = document.getElementById('backlogLabelInput');
+            if (!input) return;
+            let label = (input.value || '').trim();
+            const backlog = readBacklog();
+            if (!label) label = `Sample ${backlog.length + 1}`;
+
+            const entry = {
+                id: 'b' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                label: label,
+                savedAt: new Date().toISOString(),
+                counts: Object.assign({}, counts),
+                mode: mode,
+                otherLabel: otherLabelValue,
+                params: {
+                    hgb: document.getElementById('hgb').value,
+                    mcv: document.getElementById('mcv').value,
+                    wbc: document.getElementById('wbc').value,
+                    plt: document.getElementById('plt').value
+                }
+            };
+            backlog.unshift(entry);
+            if (!writeBacklog(backlog)) return;
+            input.value = '';
+            input.placeholder = `Label (e.g., Sample ${backlog.length + 1})`;
+            renderBacklogList();
+            showToast(`Saved "${entry.label}"`);
+        }
+
+        function loadBacklogEntry(id) {
+            const backlog = readBacklog();
+            const entry = backlog.find(e => e.id === id);
+            if (!entry) return;
+            if (!withNativeDialog(() => confirm(`Load "${entry.label}"?\n\nThis will replace the current counts and parameters.`))) return;
+
+            // Apply counts
+            ALL_CELLS.forEach(c => { counts[c.key] = (entry.counts && entry.counts[c.key]) || 0; });
+
+            // Apply mode & other label
+            mode = (entry.mode === 'bone') ? 'bone' : 'peripheral';
+            otherLabelValue = entry.otherLabel || 'other';
+
+            // Apply parameters
+            const p = entry.params || {};
+            ['hgb', 'mcv', 'wbc', 'plt'].forEach(k => {
+                if (p[k] !== undefined && p[k] !== null && p[k] !== '') {
+                    const el = document.getElementById(k);
+                    if (el) el.value = p[k];
+                }
+            });
+
+            // Re-render (renderDiffGrid uses current `mode` and `otherLabelValue`)
+            renderDiffGrid();
+            updateAll();
+            closeModal('backlogModal');
+            showToast(`Loaded "${entry.label}"`);
+        }
+
+        function deleteBacklogEntry(id) {
+            const backlog = readBacklog();
+            const entry = backlog.find(e => e.id === id);
+            if (!entry) return;
+            if (!withNativeDialog(() => confirm(`Delete "${entry.label}"?`))) return;
+            writeBacklog(backlog.filter(e => e.id !== id));
+            renderBacklogList();
+            showToast('Entry deleted');
+        }
+
+        function confirmClearBacklog() {
+            const backlog = readBacklog();
+            if (backlog.length === 0) { showToast('Backlog already empty'); return; }
+            if (!withNativeDialog(() => confirm('Delete all backlog entries?\n\nThis cannot be undone.'))) return;
+            writeBacklog([]);
+            renderBacklogList();
+            showToast('Backlog cleared');
+        }
+
+        function renderBacklogList() {
+            const container = document.getElementById('backlogList');
+            if (!container) return;
+            const backlog = readBacklog();
+
+            if (backlog.length === 0) {
+                container.innerHTML = '<div class="backlog-empty">No saved entries yet.</div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            backlog.forEach(entry => {
+                const total = computeEntryTotal(entry);
+                const dt = new Date(entry.savedAt);
+                const timeStr = isNaN(dt.getTime()) ? '' : dt.toLocaleString();
+                const modeStr = (entry.mode === 'bone') ? 'Bone marrow' : 'Peripheral blood';
+
+                const item = document.createElement('div');
+                item.className = 'backlog-item';
+
+                const info = document.createElement('div');
+                info.className = 'info';
+                const lbl = document.createElement('div');
+                lbl.className = 'label';
+                lbl.textContent = entry.label;
+                lbl.title = entry.label;
+                const meta = document.createElement('div');
+                meta.className = 'meta';
+                meta.textContent = `${timeStr}  •  ${total} cells  •  ${modeStr}`;
+                info.appendChild(lbl);
+                info.appendChild(meta);
+
+                const loadBtn = document.createElement('button');
+                loadBtn.textContent = 'Load';
+                loadBtn.title = 'Load this entry';
+                loadBtn.onclick = () => loadBacklogEntry(entry.id);
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'secondary';
+                delBtn.textContent = '✕';
+                delBtn.title = 'Delete this entry';
+                delBtn.onclick = () => deleteBacklogEntry(entry.id);
+
+                item.appendChild(info);
+                item.appendChild(loadBtn);
+                item.appendChild(delBtn);
+                container.appendChild(item);
+            });
+        }
+
+        // ---------- Audio ----------
+        function initAudio() {
+            if (!audioCtx) {
+                try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+                catch (e) { console.warn('Web Audio not supported', e); }
+            }
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playBeep(freq, duration, vol) {
+            if (!audioCtx || vol <= 0) return;
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime + duration * 0.6);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) { console.warn('Audio playback failed', e); }
+        }
+
+        function playSound(type) {
+            if (globalVolume <= 0) return;
+            if (customSounds[type]) {
+                const audio = new Audio(customSounds[type]);
+                audio.volume = globalVolume;
+                audio.play().catch(e => console.warn('Custom sound playback failed', e));
+            } else {
+                initAudio();
+                if (type === 'normal') playBeep(800, 0.05, globalVolume);
+                else playBeep(1200, 0.35, globalVolume);
+            }
+        }
+
+        document.addEventListener('click', function initOnce() {
+            initAudio();
+            document.removeEventListener('click', initOnce);
+        }, { once: true });
+
+        // ---------- Pause on window blur ----------
+        let paused = false;
+        let pauseOnBlur = false;
+        let nativeDialogOpen = false;
+        let nativeDialogClosedAt = 0;
+
+        function pauseCounting() {
+            if (paused) return;
+            paused = true;
+            document.body.classList.add('paused');
+            const ov = document.getElementById('pauseOverlay');
+            if (ov) ov.classList.add('show');
+        }
+
+        function resumeCounting() {
+            const wasPaused = paused;
+            paused = false;
+            document.body.classList.remove('paused');
+            const ov = document.getElementById('pauseOverlay');
+            if (ov) ov.classList.remove('show');
+            if (wasPaused) showToast('Counting resumed');
+        }
+
+        function withNativeDialog(fn) {
+            nativeDialogOpen = true;
+            let result;
+            try {
+                result = fn();
+            } finally {
+                nativeDialogClosedAt = Date.now();
+                nativeDialogOpen = false;
+            }
+            return result;
+        }
+
+        window.addEventListener('blur', () => {
+            if (!pauseOnBlur) return;
+            setTimeout(() => {
+                if (!pauseOnBlur) return;
+                if (document.hasFocus()) return;
+                if (document.querySelector('.modal.open')) return;
+                if (nativeDialogOpen) return;
+                if (Date.now() - nativeDialogClosedAt < 1200) return;
+                pauseCounting();
+            }, 150);
         });
-        keyMap = cleaned;
-    }
 
-    // Pause-on-blur
-    pauseOnBlur = !!prefs.pauseOnBlur;
-}
+        window.addEventListener('focus', () => {
+            if (paused) resumeCounting();
+        });
 
-const SHIFT_MAP = {
-    '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
-    '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
-    '>': '.'
-};
+        document.addEventListener('visibilitychange', () => {
+            if (!pauseOnBlur) return;
+            if (document.hidden) pauseCounting();
+        });
 
-// ---------- Backlog storage ----------
-const BACKLOG_KEY = 'haemcount.backlog.v1';
+        // ---------- Unsaved-work guard (reload / close / navigate away) ----------
+        let bypassUnloadWarning = false;
 
-function readBacklog() {
-    try {
-        const raw = localStorage.getItem(BACKLOG_KEY);
-        if (!raw) return [];
-        const arr = JSON.parse(raw);
-        return Array.isArray(arr) ? arr : [];
-    } catch (e) {
-        console.warn('Could not read backlog', e);
-        return [];
-    }
-}
-
-function writeBacklog(arr) {
-    try {
-        localStorage.setItem(BACKLOG_KEY, JSON.stringify(arr));
-        return true;
-    } catch (e) {
-        console.warn('Could not write backlog', e);
-        showToast('Could not save backlog');
-        return false;
-    }
-}
-
-function computeEntryTotal(entry) {
-    let total = 0;
-    const c = entry.counts || {};
-    ALL_CELLS.forEach(cell => {
-        if (entry.mode === 'peripheral' && cell.key === 'nRBC') return;
-        total += c[cell.key] || 0;
-    });
-    return total;
-}
-
-function openBacklog() {
-    renderBacklogList();
-    const input = document.getElementById('backlogLabelInput');
-    if (input) {
-        const backlog = readBacklog();
-        input.value = '';
-        input.placeholder = `Label (e.g., Sample ${backlog.length + 1})`;
-    }
-    openModal('backlogModal');
-}
-
-function saveCurrentToBacklog() {
-    const input = document.getElementById('backlogLabelInput');
-    if (!input) return;
-    let label = (input.value || '').trim();
-    const backlog = readBacklog();
-    if (!label) label = `Sample ${backlog.length + 1}`;
-
-    const entry = {
-        id: 'b' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-        label: label,
-        savedAt: new Date().toISOString(),
-        counts: Object.assign({}, counts),
-        mode: mode,
-        otherLabel: otherLabelValue,
-        params: {
-            hgb: document.getElementById('hgb').value,
-            mcv: document.getElementById('mcv').value,
-            wbc: document.getElementById('wbc').value,
-            plt: document.getElementById('plt').value
+        function hasCountedCells() {
+            return ALL_CELLS.some(c => (counts[c.key] || 0) > 0);
         }
-    };
-    backlog.unshift(entry);
-    if (!writeBacklog(backlog)) return;
-    input.value = '';
-    input.placeholder = `Label (e.g., Sample ${backlog.length + 1})`;
-    renderBacklogList();
-    showToast(`Saved "${entry.label}"`);
-}
 
-function loadBacklogEntry(id) {
-    const backlog = readBacklog();
-    const entry = backlog.find(e => e.id === id);
-    if (!entry) return;
-    if (!withNativeDialog(() => confirm(`Load "${entry.label}"?\n\nThis will replace the current counts and parameters.`))) return;
+        window.addEventListener('beforeunload', (e) => {
+            if (bypassUnloadWarning) return;
+            if (!hasCountedCells()) return;
+            e.preventDefault();
+            e.returnValue = '';   // required by Chrome/Edge to show the native prompt
+            return '';
+        });
 
-    // Apply counts
-    ALL_CELLS.forEach(c => { counts[c.key] = (entry.counts && entry.counts[c.key]) || 0; });
-
-    // Apply mode & other label
-    mode = (entry.mode === 'bone') ? 'bone' : 'peripheral';
-    otherLabelValue = entry.otherLabel || 'other';
-
-    // Apply parameters
-    const p = entry.params || {};
-    ['hgb', 'mcv', 'wbc', 'plt'].forEach(k => {
-        if (p[k] !== undefined && p[k] !== null && p[k] !== '') {
-            const el = document.getElementById(k);
-            if (el) el.value = p[k];
+        // ---------- Themes ----------
+        function applyTheme(name) {
+            const t = THEMES[name] || THEMES.light;
+            currentTheme = THEMES[name] ? name : 'light';
+            const r = document.documentElement;
+            r.style.setProperty('--bg', t.bg);
+            r.style.setProperty('--panel', t.panel);
+            r.style.setProperty('--border', t.border);
+            r.style.setProperty('--accent', t.accent);
+            r.style.setProperty('--danger', t.danger);
+            r.style.setProperty('--text', t.text);
+            r.style.setProperty('--muted', t.muted);
+            r.style.setProperty('--titlebar', t.titlebar);
+            r.style.setProperty('--titlebar-text', t.titlebarText);
+            r.style.setProperty('--menu-bg', t.menuBg);
+            r.style.setProperty('--input-bg', t.inputBg);
+            r.style.setProperty('--toast-bg', t.toastBg);
+            r.style.setProperty('--toast-text', t.toastText);
+            if (chart) updateHistogram();
+            savePrefs();
         }
-    });
 
-    // Re-render (renderDiffGrid uses current `mode` and `otherLabelValue`)
-    renderDiffGrid();
-    updateAll();
-    closeModal('backlogModal');
-    showToast(`Loaded "${entry.label}"`);
-}
+        // ---------- Core ----------
+        function initCounts() {
+            counts = {};
+            ALL_CELLS.forEach(c => counts[c.key] = 0);
+        }
 
-function deleteBacklogEntry(id) {
-    const backlog = readBacklog();
-    const entry = backlog.find(e => e.id === id);
-    if (!entry) return;
-    if (!withNativeDialog(() => confirm(`Delete "${entry.label}"?`))) return;
-    writeBacklog(backlog.filter(e => e.id !== id));
-    renderBacklogList();
-    showToast('Entry deleted');
-}
+        function getKeyForCell(cellKey) {
+            for (const [k, v] of Object.entries(keyMap)) {
+                if (v === cellKey) return k;
+            }
+            return '';
+        }
 
-function confirmClearBacklog() {
-    const backlog = readBacklog();
-    if (backlog.length === 0) { showToast('Backlog already empty'); return; }
-    if (!withNativeDialog(() => confirm('Delete all backlog entries?\n\nThis cannot be undone.'))) return;
-    writeBacklog([]);
-    renderBacklogList();
-    showToast('Backlog cleared');
-}
+        function capitalize(s) {
+            return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+        }
 
-function renderBacklogList() {
-    const container = document.getElementById('backlogList');
-    if (!container) return;
-    const backlog = readBacklog();
+        function escapeHtml(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
 
-    if (backlog.length === 0) {
-        container.innerHTML = '<div class="backlog-empty">No saved entries yet.</div>';
-        return;
-    }
+        // Renders the inner HTML of a cell's label.
+        // The "Other" cell gets an inline contenteditable name span so users can rename
+        // the category directly from the grid (no floating input box).
+        function getCellLabelHTML(cell) {
+            const k = getKeyForCell(cell.key);
+            const keySuffix = k ? ` (${escapeHtml(k)})` : '';
+            if (cell.key === 'other') {
+                const name = capitalize(otherLabelValue || 'other');
+                return `<span class="editable-label" contenteditable="true" spellcheck="false"` +
+                    ` title="Click to rename this category"` +
+                    ` onfocus="this.select()"` +
+                    ` onkeydown="handleOtherLabelKey(event, this)"` +
+                    ` onblur="commitOtherLabel(this)">${escapeHtml(name)}</span>` +
+                    keySuffix;
+            }
+            return escapeHtml(cell.dispName) + keySuffix;
+        }
 
-    container.innerHTML = '';
-    backlog.forEach(entry => {
-        const total = computeEntryTotal(entry);
-        const dt = new Date(entry.savedAt);
-        const timeStr = isNaN(dt.getTime()) ? '' : dt.toLocaleString();
-        const modeStr = (entry.mode === 'bone') ? 'Bone marrow' : 'Peripheral blood';
-
-        const item = document.createElement('div');
-        item.className = 'backlog-item';
-
-        const info = document.createElement('div');
-        info.className = 'info';
-        const lbl = document.createElement('div');
-        lbl.className = 'label';
-        lbl.textContent = entry.label;
-        lbl.title = entry.label;
-        const meta = document.createElement('div');
-        meta.className = 'meta';
-        meta.textContent = `${timeStr}  •  ${total} cells  •  ${modeStr}`;
-        info.appendChild(lbl);
-        info.appendChild(meta);
-
-        const loadBtn = document.createElement('button');
-        loadBtn.textContent = 'Load';
-        loadBtn.title = 'Load this entry';
-        loadBtn.onclick = () => loadBacklogEntry(entry.id);
-
-        const delBtn = document.createElement('button');
-        delBtn.className = 'secondary';
-        delBtn.textContent = '✕';
-        delBtn.title = 'Delete this entry';
-        delBtn.onclick = () => deleteBacklogEntry(entry.id);
-
-        item.appendChild(info);
-        item.appendChild(loadBtn);
-        item.appendChild(delBtn);
-        container.appendChild(item);
-    });
-}
-
-// ---------- Audio ----------
-function initAudio() {
-    if (!audioCtx) {
-        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
-        catch (e) { console.warn('Web Audio not supported', e); }
-    }
-    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
-}
-
-function playBeep(freq, duration, vol) {
-    if (!audioCtx || vol <= 0) return;
-    try {
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
-        gain.gain.setValueAtTime(vol, audioCtx.currentTime + duration * 0.6);
-        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-        osc.connect(gain);
-        gain.connect(audioCtx.destination);
-        osc.start();
-        osc.stop(audioCtx.currentTime + duration);
-    } catch (e) { console.warn('Audio playback failed', e); }
-}
-
-function playSound(type) {
-    if (globalVolume <= 0) return;
-    if (customSounds[type]) {
-        const audio = new Audio(customSounds[type]);
-        audio.volume = globalVolume;
-        audio.play().catch(e => console.warn('Custom sound playback failed', e));
-    } else {
-        initAudio();
-        if (type === 'normal') playBeep(800, 0.05, globalVolume);
-        else playBeep(1200, 0.35, globalVolume);
-    }
-}
-
-document.addEventListener('click', function initOnce() {
-    initAudio();
-    document.removeEventListener('click', initOnce);
-}, { once: true });
-
-// ---------- Pause on window blur ----------
-let paused = false;
-let pauseOnBlur = false;
-let nativeDialogOpen = false;
-let nativeDialogClosedAt = 0;
-
-function pauseCounting() {
-    if (paused) return;
-    paused = true;
-    document.body.classList.add('paused');
-    const ov = document.getElementById('pauseOverlay');
-    if (ov) ov.classList.add('show');
-}
-
-function resumeCounting() {
-    const wasPaused = paused;
-    paused = false;
-    document.body.classList.remove('paused');
-    const ov = document.getElementById('pauseOverlay');
-    if (ov) ov.classList.remove('show');
-    if (wasPaused) showToast('Counting resumed');
-}
-
-function withNativeDialog(fn) {
-    nativeDialogOpen = true;
-    let result;
-    try {
-        result = fn();
-    } finally {
-        nativeDialogClosedAt = Date.now();
-        nativeDialogOpen = false;
-    }
-    return result;
-}
-
-window.addEventListener('blur', () => {
-    if (!pauseOnBlur) return;
-    setTimeout(() => {
-        if (!pauseOnBlur) return;
-        if (document.hasFocus()) return;
-        if (document.querySelector('.modal.open')) return;
-        if (nativeDialogOpen) return;
-        if (Date.now() - nativeDialogClosedAt < 1200) return;
-        pauseCounting();
-    }, 150);
-});
-
-window.addEventListener('focus', () => {
-    if (paused) resumeCounting();
-});
-
-document.addEventListener('visibilitychange', () => {
-    if (!pauseOnBlur) return;
-    if (document.hidden) pauseCounting();
-});
-
-// ---------- Unsaved-work guard (reload / close / navigate away) ----------
-let bypassUnloadWarning = false;
-
-function hasCountedCells() {
-    return ALL_CELLS.some(c => (counts[c.key] || 0) > 0);
-}
-
-window.addEventListener('beforeunload', (e) => {
-    if (bypassUnloadWarning) return;
-    if (!hasCountedCells()) return;
-    e.preventDefault();
-    e.returnValue = '';   // required by Chrome/Edge to show the native prompt
-    return '';
-});
-
-// ---------- Themes ----------
-function applyTheme(name) {
-    const t = THEMES[name] || THEMES.light;
-    currentTheme = THEMES[name] ? name : 'light';
-    const r = document.documentElement;
-    r.style.setProperty('--bg', t.bg);
-    r.style.setProperty('--panel', t.panel);
-    r.style.setProperty('--border', t.border);
-    r.style.setProperty('--accent', t.accent);
-    r.style.setProperty('--danger', t.danger);
-    r.style.setProperty('--text', t.text);
-    r.style.setProperty('--muted', t.muted);
-    r.style.setProperty('--titlebar', t.titlebar);
-    r.style.setProperty('--titlebar-text', t.titlebarText);
-    r.style.setProperty('--menu-bg', t.menuBg);
-    r.style.setProperty('--input-bg', t.inputBg);
-    r.style.setProperty('--toast-bg', t.toastBg);
-    r.style.setProperty('--toast-text', t.toastText);
-    if (chart) updateHistogram();
-    savePrefs();
-}
-
-// ---------- Core ----------
-function initCounts() {
-    counts = {};
-    ALL_CELLS.forEach(c => counts[c.key] = 0);
-}
-
-function getKeyForCell(cellKey) {
-    for (const [k, v] of Object.entries(keyMap)) {
-        if (v === cellKey) return k;
-    }
-    return '';
-}
-
-function capitalize(s) {
-    return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-}
-
-function escapeHtml(s) {
-    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
-        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    }[c]));
-}
-
-// Renders the inner HTML of a cell's label.
-// The "Other" cell gets an inline contenteditable name span so users can rename
-// the category directly from the grid (no floating input box).
-function getCellLabelHTML(cell) {
-    const k = getKeyForCell(cell.key);
-    const keySuffix = k ? ` (${escapeHtml(k)})` : '';
-    if (cell.key === 'other') {
-        const name = capitalize(otherLabelValue || 'other');
-        return `<span class="editable-label" contenteditable="true" spellcheck="false"` +
-               ` title="Click to rename this category"` +
-               ` onfocus="this.select()"` +
-               ` onkeydown="handleOtherLabelKey(event, this)"` +
-               ` onblur="commitOtherLabel(this)">${escapeHtml(name)}</span>` +
-               keySuffix;
-    }
-    return escapeHtml(cell.dispName) + keySuffix;
-}
-
-function renderDiffGrid() {
-    const grid = document.getElementById('diffGrid');
-    grid.innerHTML = '';
-    ALL_CELLS.forEach(cell => {
-        const div = document.createElement('div');
-        div.className = 'diff-cell';
-        div.innerHTML = `
+        function renderDiffGrid() {
+            const grid = document.getElementById('diffGrid');
+            grid.innerHTML = '';
+            ALL_CELLS.forEach(cell => {
+                const div = document.createElement('div');
+                div.className = 'diff-cell';
+                div.innerHTML = `
             <span class="cell-label" title="${escapeHtml(cell.dispName)}">${getCellLabelHTML(cell)}</span>
             <div class="count-wrap">
                 <span class="count-box"
@@ -1511,483 +1766,484 @@ function renderDiffGrid() {
             </div>
             <span class="pct" id="pct-${cell.key}">0%</span>
         `;
-        grid.appendChild(div);
-    });
+                grid.appendChild(div);
+            });
 
-    // Mode radios as the final grid item (checked state follows the current `mode`)
-    const modeDiv = document.createElement('div');
-    modeDiv.className = 'mode-cell';
-    modeDiv.innerHTML = `
+            // Mode radios as the final grid item (checked state follows the current `mode`)
+            const modeDiv = document.createElement('div');
+            modeDiv.className = 'mode-cell';
+            modeDiv.innerHTML = `
         <label><input type="radio" name="mode" value="bone" ${mode === 'bone' ? 'checked' : ''} onchange="changeSampleType('bone')"> Bone marrow</label>
         <label><input type="radio" name="mode" value="peripheral" ${mode === 'peripheral' ? 'checked' : ''} onchange="changeSampleType('peripheral')"> Peripheral blood</label>
         <div class="ratio" id="ratioBox" style="display:none;">M:E ratio: <strong id="meRatio">—</strong></div>
     `;
-    grid.appendChild(modeDiv);
-}
-
-function handleCountKey(e, cellKey, el) {
-    if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
-    else if (e.key === 'Escape') {
-        e.preventDefault();
-        el.textContent = counts[cellKey] || 0;
-        el.blur();
-    }
-}
-
-function commitCount(cellKey, el) {
-    const val = Math.max(0, parseInt(el.textContent.trim().replace(/[^0-9-]/g, '')) || 0);
-    counts[cellKey] = val;
-    el.textContent = val;
-    updateAll();
-}
-
-// ---------- Inline-editable "Other" label ----------
-function handleOtherLabelKey(e, el) {
-    if (e.key === 'Enter') {
-        e.preventDefault();
-        el.blur();
-    } else if (e.key === 'Escape') {
-        e.preventDefault();
-        el.textContent = capitalize(otherLabelValue || 'other');
-        el.blur();
-    }
-}
-
-function commitOtherLabel(el) {
-    let val = (el.textContent || '').replace(/\s+/g, ' ').trim();
-    if (!val) val = 'other';
-    if (val.length > 32) val = val.slice(0, 32);   // keep the cell tidy
-    otherLabelValue = val;
-    el.textContent = capitalize(val);
-    // Don't rebuild the grid — just refresh anything derived from the label.
-    updateOutput();
-}
-
-function getTotal() {
-    let total = 0;
-    ALL_CELLS.forEach(c => {
-        if (mode === 'peripheral' && c.key === 'nRBC') return;
-        total += counts[c.key] || 0;
-    });
-    return total;
-}
-
-function change(key, delta) {
-    if (paused) return;
-    if (delta < 0 && counts[key] <= 0) return;
-    counts[key] = (counts[key] || 0) + delta;
-    if (delta > 0) {
-        initAudio();
-        const total = getTotal();
-        if (total > 0 && total % 100 === 0) playSound('century');
-        else playSound('normal');
-    }
-    updateAll();
-}
-
-function updateAll() {
-    const total = getTotal();
-    ALL_CELLS.forEach(cell => {
-        const cntEl = document.getElementById(`cnt-${cell.key}`);
-        const pctEl = document.getElementById(`pct-${cell.key}`);
-        if (cntEl && document.activeElement !== cntEl) cntEl.textContent = counts[cell.key] || 0;
-        if (pctEl) {
-            const pct = total > 0 ? ((counts[cell.key] || 0) / total * 100) : 0;
-            pctEl.textContent = pct.toFixed(0) + '%';
-        }
-    });
-    document.getElementById('totalCount').textContent = total;
-
-    const ratioBox = document.getElementById('ratioBox');
-    if (ratioBox) {
-        if (mode === 'bone') {
-            ratioBox.style.display = 'block';
-            let myeloid = 0, erythroid = 0;
-            ALL_CELLS.forEach(c => {
-                if (c.type === 'myeloid') myeloid += counts[c.key] || 0;
-                if (c.type === 'erythroid') erythroid += counts[c.key] || 0;
-            });
-            const ratio = erythroid > 0 ? (myeloid / erythroid).toFixed(2) : '—';
-            document.getElementById('meRatio').textContent = erythroid > 0 ? `${ratio}:1` : '—';
-        } else {
-            ratioBox.style.display = 'none';
-        }
-    }
-
-    updateHistogram();
-    updateOutput();
-}
-
-function updateHistogram() {
-    const histSection = document.querySelector('[data-section="hist"]');
-    if (!histSection || histSection.style.display === 'none') return;
-    const canvas = document.getElementById('histChart');
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    const t = THEMES[currentTheme] || THEMES.light;
-
-    const histCells = HIST_ORDER.map(k => ALL_CELLS.find(c => c.key === k));
-    const labels = histCells.map(c => c.short);
-    const data = histCells.map(c => counts[c.key] || 0);
-    const greyBars = histCells.map(() => '#a8a8a8');
-
-    if (chart) chart.destroy();
-    chart = new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                data: data,
-                backgroundColor: greyBars,
-                borderColor: '#888888',
-                borderWidth: 1,
-                barPercentage: 0.85,
-                categoryPercentage: 0.9
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            animation: false,
-            plugins: {
-                legend: { display: false },
-                tooltip: {
-                    titleFont: { size: 10 },
-                    bodyFont: { size: 10 },
-                    callbacks: { label: (ctx) => `${ctx.raw} cells` }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: { stepSize: 5, font: { size: 9 }, color: t.text, padding: 2 },
-                    grid: { color: t.border, drawTicks: false },
-                    border: { display: true, color: t.border }
-                },
-                x: {
-                    ticks: { font: { size: 9 }, color: t.text, padding: 2 },
-                    grid: { display: false },
-                    border: { display: true, color: t.border }
-                }
-            },
-            layout: { padding: { top: 4, right: 6, left: 0, bottom: 0 } }
-        }
-    });
-}
-
-// ---------- Output ----------
-function generateOutput() {
-    const hgb = document.getElementById('hgb').value || '—';
-    const mcv = document.getElementById('mcv').value || '—';
-    const wbc = document.getElementById('wbc').value || '—';
-    const plt = document.getElementById('plt').value || '—';
-
-    const total = getTotal();
-    const isPeripheral = mode === 'peripheral';
-
-    let lines = [];
-    lines.push(`Haemoglobin ${hgb} g/dL, Mean Corpuscular Volume ${mcv} fL, White blood cells ${wbc} x 10^9/L, Platelets ${plt} x 10^9/L`);
-    lines.push('');
-
-    if (total === 0 && counts.nRBC === 0) {
-        lines.push('No differential count recorded.');
-    } else {
-        const outputCells = HIST_ORDER.map(k => ALL_CELLS.find(c => c.key === k));
-        const mainList = isPeripheral
-            ? outputCells.filter(c => c.key !== 'nRBC')
-            : outputCells;
-        const nonZero = mainList.filter(c => counts[c.key] > 0);
-
-        if (nonZero.length > 0) {
-            let diffStr = '';
-            nonZero.forEach((c, i) => {
-                const pct = total > 0 ? ((counts[c.key] / total) * 100).toFixed(0) : 0;
-                const dispName = (c.key === 'other') ? (otherLabelValue || 'other') + 's' : c.name;
-                if (i === 0) diffStr += `${dispName} ${pct}%`;
-                else if (i === nonZero.length - 1) diffStr += ` and ${dispName} ${pct}%`;
-                else diffStr += `, ${dispName} ${pct}%`;
-            });
-            lines.push(`${total} cell differential count: ${diffStr}`);
-        } else {
-            lines.push(`${total} cell differential count.`);
+            grid.appendChild(modeDiv);
         }
 
-        if (isPeripheral && counts.nRBC > 0) {
-            const nRBCPer100 = total > 0 ? ((counts.nRBC / total) * 100).toFixed(0) : 0;
-            lines.push(`nRBCs: ${nRBCPer100} per 100 WBCs`);
-        }
-
-        if (mode === 'bone') {
-            let myeloid = 0, erythroid = 0;
-            ALL_CELLS.forEach(c => {
-                if (c.type === 'myeloid') myeloid += counts[c.key] || 0;
-                if (c.type === 'erythroid') erythroid += counts[c.key] || 0;
-            });
-            if (erythroid > 0) {
-                lines.push(`Myeloid:Erythroid ratio ${ (myeloid/erythroid).toFixed(2) }:1`);
+        function handleCountKey(e, cellKey, el) {
+            if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+            else if (e.key === 'Escape') {
+                e.preventDefault();
+                el.textContent = counts[cellKey] || 0;
+                el.blur();
             }
         }
-    }
 
-    // "Total cells counted" intentionally omitted from clipboard output
-    return lines.join('\n');
-}
+        function commitCount(cellKey, el) {
+            const val = Math.max(0, parseInt(el.textContent.trim().replace(/[^0-9-]/g, '')) || 0);
+            counts[cellKey] = val;
+            el.textContent = val;
+            updateAll();
+        }
 
-function updateOutput() {
-    document.getElementById('outputBox').textContent = generateOutput();
-}
+        // ---------- Inline-editable "Other" label ----------
+        function handleOtherLabelKey(e, el) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                el.blur();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                el.textContent = capitalize(otherLabelValue || 'other');
+                el.blur();
+            }
+        }
 
-// ---------- Clipboard ----------
-function copyOutput() {
-    const text = generateOutput();
-    navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard'))
-        .catch(() => {
-            const ta = document.createElement('textarea');
-            ta.value = text;
-            document.body.appendChild(ta);
-            ta.select();
-            document.execCommand('copy');
-            document.body.removeChild(ta);
-            showToast('Copied to clipboard');
+        function commitOtherLabel(el) {
+            let val = (el.textContent || '').replace(/\s+/g, ' ').trim();
+            if (!val) val = 'other';
+            if (val.length > 32) val = val.slice(0, 32);   // keep the cell tidy
+            otherLabelValue = val;
+            el.textContent = capitalize(val);
+            // Don't rebuild the grid — just refresh anything derived from the label.
+            updateOutput();
+        }
+
+        function getTotal() {
+            let total = 0;
+            ALL_CELLS.forEach(c => {
+                if (mode === 'peripheral' && c.key === 'nRBC') return;
+                total += counts[c.key] || 0;
+            });
+            return total;
+        }
+
+        function change(key, delta) {
+            if (paused) return;
+            if (delta < 0 && counts[key] <= 0) return;
+            counts[key] = (counts[key] || 0) + delta;
+            if (delta > 0) {
+                initAudio();
+                const total = getTotal();
+                if (total > 0 && total % 100 === 0) playSound('century');
+                else playSound('normal');
+            }
+            updateAll();
+        }
+
+        function updateAll() {
+            const total = getTotal();
+            ALL_CELLS.forEach(cell => {
+                const cntEl = document.getElementById(`cnt-${cell.key}`);
+                const pctEl = document.getElementById(`pct-${cell.key}`);
+                if (cntEl && document.activeElement !== cntEl) cntEl.textContent = counts[cell.key] || 0;
+                if (pctEl) {
+                    const pct = total > 0 ? ((counts[cell.key] || 0) / total * 100) : 0;
+                    pctEl.textContent = pct.toFixed(0) + '%';
+                }
+            });
+            document.getElementById('totalCount').textContent = total;
+
+            const ratioBox = document.getElementById('ratioBox');
+            if (ratioBox) {
+                if (mode === 'bone') {
+                    ratioBox.style.display = 'block';
+                    let myeloid = 0, erythroid = 0;
+                    ALL_CELLS.forEach(c => {
+                        if (c.type === 'myeloid') myeloid += counts[c.key] || 0;
+                        if (c.type === 'erythroid') erythroid += counts[c.key] || 0;
+                    });
+                    const ratio = erythroid > 0 ? (myeloid / erythroid).toFixed(2) : '—';
+                    document.getElementById('meRatio').textContent = erythroid > 0 ? `${ratio}:1` : '—';
+                } else {
+                    ratioBox.style.display = 'none';
+                }
+            }
+
+            updateHistogram();
+            updateOutput();
+        }
+
+        function updateHistogram() {
+            const histSection = document.querySelector('[data-section="hist"]');
+            if (!histSection || histSection.style.display === 'none') return;
+            const canvas = document.getElementById('histChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const t = THEMES[currentTheme] || THEMES.light;
+
+            const histCells = HIST_ORDER.map(k => ALL_CELLS.find(c => c.key === k));
+            const labels = histCells.map(c => c.short);
+            const data = histCells.map(c => counts[c.key] || 0);
+            const greyBars = histCells.map(() => '#a8a8a8');
+
+            if (chart) chart.destroy();
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: greyBars,
+                        borderColor: '#888888',
+                        borderWidth: 1,
+                        barPercentage: 0.85,
+                        categoryPercentage: 0.9
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            titleFont: { size: 10 },
+                            bodyFont: { size: 10 },
+                            callbacks: { label: (ctx) => `${ctx.raw} cells` }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 5, font: { size: 9 }, color: t.text, padding: 2 },
+                            grid: { color: t.border, drawTicks: false },
+                            border: { display: true, color: t.border }
+                        },
+                        x: {
+                            ticks: { font: { size: 9 }, color: t.text, padding: 2 },
+                            grid: { display: false },
+                            border: { display: true, color: t.border }
+                        }
+                    },
+                    layout: { padding: { top: 4, right: 6, left: 0, bottom: 0 } }
+                }
+            });
+        }
+
+        // ---------- Output ----------
+        function generateOutput() {
+            const hgb = document.getElementById('hgb').value || '—';
+            const mcv = document.getElementById('mcv').value || '—';
+            const wbc = document.getElementById('wbc').value || '—';
+            const plt = document.getElementById('plt').value || '—';
+
+            const total = getTotal();
+            const isPeripheral = mode === 'peripheral';
+
+            let lines = [];
+            lines.push(`Haemoglobin ${hgb} g/dL, Mean Corpuscular Volume ${mcv} fL, White blood cells ${wbc} x 10^9/L, Platelets ${plt} x 10^9/L`);
+            lines.push('');
+
+            if (total === 0 && counts.nRBC === 0) {
+                lines.push('No differential count recorded.');
+            } else {
+                const outputCells = HIST_ORDER.map(k => ALL_CELLS.find(c => c.key === k));
+                const mainList = isPeripheral
+                    ? outputCells.filter(c => c.key !== 'nRBC')
+                    : outputCells;
+                const nonZero = mainList.filter(c => counts[c.key] > 0);
+
+                if (nonZero.length > 0) {
+                    let diffStr = '';
+                    nonZero.forEach((c, i) => {
+                        const pct = total > 0 ? ((counts[c.key] / total) * 100).toFixed(0) : 0;
+                        const dispName = (c.key === 'other') ? (otherLabelValue || 'other') + 's' : c.name;
+                        if (i === 0) diffStr += `${dispName} ${pct}%`;
+                        else if (i === nonZero.length - 1) diffStr += ` and ${dispName} ${pct}%`;
+                        else diffStr += `, ${dispName} ${pct}%`;
+                    });
+                    lines.push(`${total} cell differential count: ${diffStr}`);
+                } else {
+                    lines.push(`${total} cell differential count.`);
+                }
+
+                if (isPeripheral && counts.nRBC > 0) {
+                    const nRBCPer100 = total > 0 ? ((counts.nRBC / total) * 100).toFixed(0) : 0;
+                    lines.push(`nRBCs: ${nRBCPer100} per 100 WBCs`);
+                }
+
+                if (mode === 'bone') {
+                    let myeloid = 0, erythroid = 0;
+                    ALL_CELLS.forEach(c => {
+                        if (c.type === 'myeloid') myeloid += counts[c.key] || 0;
+                        if (c.type === 'erythroid') erythroid += counts[c.key] || 0;
+                    });
+                    if (erythroid > 0) {
+                        lines.push(`Myeloid:Erythroid ratio ${(myeloid / erythroid).toFixed(2)}:1`);
+                    }
+                }
+            }
+
+            // "Total cells counted" intentionally omitted from clipboard output
+            return lines.join('\n');
+        }
+
+        function updateOutput() {
+            document.getElementById('outputBox').textContent = generateOutput();
+        }
+
+        // ---------- Clipboard ----------
+        function copyOutput() {
+            const text = generateOutput();
+            navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard'))
+                .catch(() => {
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    showToast('Copied to clipboard');
+                });
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 1600);
+        }
+
+        // ---------- Reset with confirmation ----------
+        function confirmReset() {
+            if (withNativeDialog(() => confirm(
+                'Reset all counts and restore the "Other" label?\n\nThis cannot be undone.'
+            ))) {
+                resetAll();
+            }
+        }
+
+        function resetAll() {
+            // 1. Counts back to zero
+            initCounts();
+
+            // 2. "Other" label back to its default
+            otherLabelValue = 'other';
+
+            // 3. Keep whatever theme the user is currently on
+            applyTheme(currentTheme);
+
+            renderDiffGrid();
+            updateAll();
+            showToast('Counts reset');
+        }
+
+        // ---------- Modals ----------
+        function openModal(id) {
+            document.getElementById(id).classList.add('open');
+            if (id === 'keysModal') renderKeybinds();
+            if (id === 'preferencesModal') initPreferences();
+            if (id === 'backlogModal') renderBacklogList();
+        }
+        function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+        document.querySelectorAll('.modal').forEach(m => {
+            m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
         });
-}
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') document.querySelectorAll('.modal.open').forEach(m => m.classList.remove('open'));
+        });
 
-function showToast(msg) {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.classList.add('show');
-    setTimeout(() => t.classList.remove('show'), 1600);
-}
+        // ---------- Preferences ----------
+        function initPreferences() {
+            document.getElementById('volumeSlider').value = globalVolume;
+            document.getElementById('volDisplay').textContent = Math.round(globalVolume * 100) + '%';
+            document.getElementById('themeSelect').value = currentTheme;
+            document.getElementById('pauseOnBlurCheck').checked = pauseOnBlur;
+            renderLayoutList();
+        }
 
-// ---------- Reset with confirmation ----------
-function confirmReset() {
-    if (withNativeDialog(() => confirm(
-        'Reset all counts and restore the "Other" label?\n\nThis cannot be undone.'
-    ))) {
-        resetAll();
-    }
-}
+        function setPauseOnBlur(enabled) {
+            pauseOnBlur = !!enabled;
+            if (!pauseOnBlur && paused) resumeCounting();
+            savePrefs();
+        }
 
-function resetAll() {
-    // 1. Counts back to zero
-    initCounts();
+        function updateVolume(val) {
+            globalVolume = parseFloat(val);
+            document.getElementById('volDisplay').textContent = Math.round(globalVolume * 100) + '%';
+            savePrefs();
+        }
 
-    // 2. "Other" label back to its default
-    otherLabelValue = 'other';
+        function loadSound(input, type) {
+            const file = input.files && input.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                customSounds[type] = e.target.result;
+                showToast(`Custom ${type} sound loaded`);
+            };
+            reader.readAsDataURL(file);
+        }
 
-    // 3. Keep whatever theme the user is currently on
-    applyTheme(currentTheme);
+        function testSound(type) { playSound(type); }
 
-    renderDiffGrid();
-    updateAll();
-    showToast('Counts reset');
-}
+        function resetSound(type) {
+            customSounds[type] = null;
+            showToast(`Reset ${type} sound`);
+        }
 
-// ---------- Modals ----------
-function openModal(id) {
-    document.getElementById(id).classList.add('open');
-    if (id === 'keysModal') renderKeybinds();
-    if (id === 'preferencesModal') initPreferences();
-    if (id === 'backlogModal') renderBacklogList();
-}
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
-document.querySelectorAll('.modal').forEach(m => {
-    m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
-});
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') document.querySelectorAll('.modal.open').forEach(m => m.classList.remove('open'));
-});
-
-// ---------- Preferences ----------
-function initPreferences() {
-    document.getElementById('volumeSlider').value = globalVolume;
-    document.getElementById('volDisplay').textContent = Math.round(globalVolume * 100) + '%';
-    document.getElementById('themeSelect').value = currentTheme;
-    document.getElementById('pauseOnBlurCheck').checked = pauseOnBlur;
-    renderLayoutList();
-}
-
-function setPauseOnBlur(enabled) {
-    pauseOnBlur = !!enabled;
-    if (!pauseOnBlur && paused) resumeCounting();
-    savePrefs();
-}
-
-function updateVolume(val) {
-    globalVolume = parseFloat(val);
-    document.getElementById('volDisplay').textContent = Math.round(globalVolume * 100) + '%';
-    savePrefs();
-}
-
-function loadSound(input, type) {
-    const file = input.files && input.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        customSounds[type] = e.target.result;
-        showToast(`Custom ${type} sound loaded`);
-    };
-    reader.readAsDataURL(file);
-}
-
-function testSound(type) { playSound(type); }
-
-function resetSound(type) {
-    customSounds[type] = null;
-    showToast(`Reset ${type} sound`);
-}
-
-// ---------- Layout ----------
-function renderLayoutList() {
-    const container = document.getElementById('layoutList');
-    container.innerHTML = '';
-    layoutOrder.forEach((key, idx) => {
-        const row = document.createElement('div');
-        row.className = 'layout-row';
-        row.innerHTML = `
+        // ---------- Layout ----------
+        function renderLayoutList() {
+            const container = document.getElementById('layoutList');
+            container.innerHTML = '';
+            layoutOrder.forEach((key, idx) => {
+                const row = document.createElement('div');
+                row.className = 'layout-row';
+                row.innerHTML = `
             <input type="checkbox" ${layoutVisible[key] ? 'checked' : ''}
                    onchange="toggleSection('${key}', this.checked)">
             <span>${SECTION_NAMES[key]}</span>
             <button ${idx === 0 ? 'disabled' : ''} onclick="moveSection('${key}', -1)" title="Move up">↑</button>
             <button ${idx === layoutOrder.length - 1 ? 'disabled' : ''} onclick="moveSection('${key}', 1)" title="Move down">↓</button>
         `;
-        container.appendChild(row);
-    });
-}
-
-function toggleSection(key, visible) {
-    layoutVisible[key] = visible;
-    applyLayout();
-}
-
-function moveSection(key, direction) {
-    const idx = layoutOrder.indexOf(key);
-    const newIdx = idx + direction;
-    if (newIdx < 0 || newIdx >= layoutOrder.length) return;
-    [layoutOrder[idx], layoutOrder[newIdx]] = [layoutOrder[newIdx], layoutOrder[idx]];
-    applyLayout();
-    renderLayoutList();
-}
-
-function applyLayout() {
-    const main = document.getElementById('mainArea');
-    const sections = {};
-    main.querySelectorAll('[data-section]').forEach(el => {
-        sections[el.dataset.section] = el;
-        el.remove();
-    });
-    layoutOrder.forEach(key => {
-        const el = sections[key];
-        if (el) {
-            el.style.display = layoutVisible[key] ? '' : 'none';
-            main.appendChild(el);
+                container.appendChild(row);
+            });
         }
-    });
-    if (layoutVisible.hist) {
-        setTimeout(() => {
-            if (chart) { chart.destroy(); chart = null; }
-            updateHistogram();
-        }, 30);
-    }
-}
 
-// ---------- Keybinds ----------
-function renderKeybinds() {
-    const container = document.getElementById('keybindList');
-    container.innerHTML = '';
-    ALL_CELLS.forEach(cell => {
-        const currentKey = getKeyForCell(cell.key);
-        const row = document.createElement('div');
-        row.className = 'keybind-row';
-        row.innerHTML = `
+        function toggleSection(key, visible) {
+            layoutVisible[key] = visible;
+            applyLayout();
+        }
+
+        function moveSection(key, direction) {
+            const idx = layoutOrder.indexOf(key);
+            const newIdx = idx + direction;
+            if (newIdx < 0 || newIdx >= layoutOrder.length) return;
+            [layoutOrder[idx], layoutOrder[newIdx]] = [layoutOrder[newIdx], layoutOrder[idx]];
+            applyLayout();
+            renderLayoutList();
+        }
+
+        function applyLayout() {
+            const main = document.getElementById('mainArea');
+            const sections = {};
+            main.querySelectorAll('[data-section]').forEach(el => {
+                sections[el.dataset.section] = el;
+                el.remove();
+            });
+            layoutOrder.forEach(key => {
+                const el = sections[key];
+                if (el) {
+                    el.style.display = layoutVisible[key] ? '' : 'none';
+                    main.appendChild(el);
+                }
+            });
+            if (layoutVisible.hist) {
+                setTimeout(() => {
+                    if (chart) { chart.destroy(); chart = null; }
+                    updateHistogram();
+                }, 30);
+            }
+        }
+
+        // ---------- Keybinds ----------
+        function renderKeybinds() {
+            const container = document.getElementById('keybindList');
+            container.innerHTML = '';
+            ALL_CELLS.forEach(cell => {
+                const currentKey = getKeyForCell(cell.key);
+                const row = document.createElement('div');
+                row.className = 'keybind-row';
+                row.innerHTML = `
             <label>${cell.dispName}</label>
             <input type="text" maxlength="1" value="${escapeHtml(currentKey)}" data-cell="${cell.key}"
                    onkeydown="handleKeyInput(event, this)">
         `;
-        container.appendChild(row);
-    });
-}
+                container.appendChild(row);
+            });
+        }
 
-function handleKeyInput(e, input) {
-    if (e.key === 'Tab') return;
-    e.preventDefault();
-    if (e.key === 'Backspace') input.value = '';
-    else if (e.key.length === 1) input.value = e.key;
-}
+        function handleKeyInput(e, input) {
+            if (e.key === 'Tab') return;
+            e.preventDefault();
+            if (e.key === 'Backspace') input.value = '';
+            else if (e.key.length === 1) input.value = e.key;
+        }
 
-function saveKeybinds() {
-    const inputs = document.querySelectorAll('#keybindList input');
-    const newKeyMap = {};
-    let hasError = false;
-    inputs.forEach(input => {
-        const key = input.value.trim();
-        const cellKey = input.dataset.cell;
-        if (key) {
-            if (newKeyMap[key]) {
-                withNativeDialog(() => alert(`Key '${key}' is already assigned to another cell!`));
-                hasError = true;
-            } else {
-                newKeyMap[key] = cellKey;
+        function saveKeybinds() {
+            const inputs = document.querySelectorAll('#keybindList input');
+            const newKeyMap = {};
+            let hasError = false;
+            inputs.forEach(input => {
+                const key = input.value.trim();
+                const cellKey = input.dataset.cell;
+                if (key) {
+                    if (newKeyMap[key]) {
+                        withNativeDialog(() => alert(`Key '${key}' is already assigned to another cell!`));
+                        hasError = true;
+                    } else {
+                        newKeyMap[key] = cellKey;
+                    }
+                }
+            });
+            if (!hasError) {
+                keyMap = newKeyMap;
+                savePrefs();
+                renderDiffGrid();
+                closeModal('keysModal');
+                showToast('Keybinds saved');
             }
         }
-    });
-    if (!hasError) {
-        keyMap = newKeyMap;
-        savePrefs();
-        renderDiffGrid();
-        closeModal('keysModal');
-        showToast('Keybinds saved');
-    }
-}
 
-// ---------- Keyboard shortcuts ----------
-document.addEventListener('keydown', (e) => {
-    if (paused) return;
-    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-    if (e.target.isContentEditable) return;
-    if (document.querySelector('.modal.open')) return;
+        // ---------- Keyboard shortcuts ----------
+        document.addEventListener('keydown', (e) => {
+            if (paused) return;
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+            if (e.target.isContentEditable) return;
+            if (document.querySelector('.modal.open')) return;
 
-    if (e.key === 'Enter') { copyOutput(); e.preventDefault(); return; }
+            if (e.key === 'Enter') { copyOutput(); e.preventDefault(); return; }
 
-    if (e.key === '-') {
-        const plusCell = keyMap['+'];
-        if (plusCell) { change(plusCell, -1); e.preventDefault(); return; }
-    }
+            if (e.key === '-') {
+                const plusCell = keyMap['+'];
+                if (plusCell) { change(plusCell, -1); e.preventDefault(); return; }
+            }
 
-    const directCell = keyMap[e.key];
-    if (directCell) { change(directCell, 1); e.preventDefault(); return; }
+            const directCell = keyMap[e.key];
+            if (directCell) { change(directCell, 1); e.preventDefault(); return; }
 
-    if (e.shiftKey && SHIFT_MAP[e.key]) {
-        const baseKey = SHIFT_MAP[e.key];
-        if (keyMap[baseKey]) { change(keyMap[baseKey], -1); e.preventDefault(); return; }
-    }
+            if (e.shiftKey && SHIFT_MAP[e.key]) {
+                const baseKey = SHIFT_MAP[e.key];
+                if (keyMap[baseKey]) { change(keyMap[baseKey], -1); e.preventDefault(); return; }
+            }
 
-    if (e.shiftKey && e.key.length === 1 && e.key >= 'A' && e.key <= 'Z') {
-        const lower = e.key.toLowerCase();
-        if (keyMap[lower] && !keyMap[e.key]) {
-            change(keyMap[lower], -1);
-            e.preventDefault();
+            if (e.shiftKey && e.key.length === 1 && e.key >= 'A' && e.key <= 'Z') {
+                const lower = e.key.toLowerCase();
+                if (keyMap[lower] && !keyMap[e.key]) {
+                    change(keyMap[lower], -1);
+                    e.preventDefault();
+                }
+            }
+        });
+
+        // ---------- Sample type ----------
+        function changeSampleType(val) {
+            mode = val;
+            document.querySelectorAll('input[name="mode"]').forEach(r => { r.checked = (r.value === val); });
+            updateAll();
         }
-    }
-});
 
-// ---------- Sample type ----------
-function changeSampleType(val) {
-    mode = val;
-    document.querySelectorAll('input[name="mode"]').forEach(r => { r.checked = (r.value === val); });
-    updateAll();
-}
+        // ---------- Initialize ----------
+        initCounts();
+        loadPrefs();                       // restore volume, theme, keybinds (+ pause-on-blur) before rendering
+        renderDiffGrid();
+        applyTheme(currentTheme);
+        updateAll();
 
-// ---------- Initialize ----------
-initCounts();
-loadPrefs();                       // restore volume, theme, keybinds (+ pause-on-blur) before rendering
-renderDiffGrid();
-applyTheme(currentTheme);
-updateAll();
-
-['hgb','mcv','wbc','plt'].forEach(id => {
-    document.getElementById(id).addEventListener('input', updateOutput);
-});
-</script>
+        ['hgb', 'mcv', 'wbc', 'plt'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updateOutput);
+        });
+    </script>
 </body>
+
 </html>
