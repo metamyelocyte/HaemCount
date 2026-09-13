@@ -973,9 +973,13 @@ See the LICENSE file for details.
         }
 
         .about-header .about-logo {
-            font-size: 28px;
-            line-height: 1;
-            margin-bottom: 8px;
+            display: block;
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 8px;
+            object-fit: contain;
+            border-radius: 14px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
         }
 
         .about-header h2 {
@@ -1368,7 +1372,8 @@ See the LICENSE file for details.
         <div class="modal-content about-content">
             <div class="about-header">
                 <span class="close" onclick="closeModal('aboutModal')">&times;</span>
-                <div class="about-logo">🩸</div>
+                <img class="about-logo" src="/icons/icon-192.png" alt="HaemCount app icon"
+                    onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'about-logo about-logo-fallback',textContent:'🩸'}))">
                 <h2>HaemCount</h2><span class="about-version">v1.0</span>
                 <p class="about-tagline">A web reimplementation of the HEMCOUNT differential cell counter</p>
             </div>
