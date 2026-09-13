@@ -665,6 +665,23 @@ See the LICENSE file for details.
             font-size: 9px;
         }
 
+        /* Status line under each sound row, showing whether a custom
+           sound is saved on this device (and its filename). */
+        .sound-status {
+            margin: -2px 0 6px 0;
+            padding-left: 2px;
+            font-size: 9px;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .sound-status.has-custom {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
         .layout-row {
             display: flex;
             align-items: center;
@@ -1341,12 +1358,17 @@ See the LICENSE file for details.
                     <button class="secondary" onclick="testSound('normal')" title="Test">▶</button>
                     <button class="secondary" onclick="resetSound('normal')" title="Reset">↺</button>
                 </div>
+                <div class="sound-status" id="soundStatus-normal">Default beep</div>
+
                 <div class="sound-row">
                     <label>Century beep:</label>
                     <input type="file" accept="audio/*" onchange="loadSound(this, 'century')">
                     <button class="secondary" onclick="testSound('century')" title="Test">▶</button>
                     <button class="secondary" onclick="resetSound('century')" title="Reset">↺</button>
                 </div>
+                <div class="sound-status" id="soundStatus-century">Default beep</div>
+
+                <p style="margin-top: 6px;">Uploaded sounds are stored on this device and are kept after a reload.</p>
             </div>
             <div class="pref-section">
                 <h4>Layout</h4>
@@ -1478,6 +1500,8 @@ See the LICENSE file for details.
         let globalVolume = 0.5;
         let audioCtx = null;
         let currentTheme = 'light';
+        // Each entry is { url, name } or null. `url` is a blob: URL (preferred)
+        // or a data: URL (localStorage fallback).
         let customSounds = { normal: null, century: null };
         let otherLabelValue = 'other';
 
@@ -1757,8 +1781,9 @@ See the LICENSE file for details.
 
         function playSound(type) {
             if (globalVolume <= 0) return;
-            if (customSounds[type]) {
-                const audio = new Audio(customSounds[type]);
+            const custom = customSounds[type];
+            if (custom && custom.url) {
+                const audio = new Audio(custom.url);
                 audio.volume = globalVolume;
                 audio.play().catch(e => console.warn('Custom sound playback failed', e));
             } else {
@@ -1766,6 +1791,145 @@ See the LICENSE file for details.
                 if (type === 'normal') playBeep(800, 0.05, globalVolume);
                 else playBeep(1200, 0.35, globalVolume);
             }
+        }
+
+        // ---------- Custom sound persistence ----------
+        // Uploaded files are written to IndexedDB (as Blobs), so they survive
+        // reloads. If IndexedDB is unavailable — some file:// contexts block it —
+        // we fall back to a data: URL in localStorage.
+        const SOUND_DB_NAME = 'haemcount.sounds';
+        const SOUND_STORE = 'sounds';
+        const SOUND_LS_PREFIX = 'haemcount.sound.';
+        const SOUND_TYPES = ['normal', 'century'];
+
+        let soundDBPromise = null;
+
+        function openSoundDB() {
+            if (!soundDBPromise) {
+                soundDBPromise = new Promise((resolve, reject) => {
+                    if (!window.indexedDB) { reject(new Error('IndexedDB unavailable')); return; }
+                    const req = indexedDB.open(SOUND_DB_NAME, 1);
+                    req.onupgradeneeded = () => {
+                        const db = req.result;
+                        if (!db.objectStoreNames.contains(SOUND_STORE)) db.createObjectStore(SOUND_STORE);
+                    };
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error || new Error('Could not open sound database'));
+                });
+            }
+            return soundDBPromise;
+        }
+
+        function soundStore(mode, action) {
+            return openSoundDB().then(db => new Promise((resolve, reject) => {
+                const tx = db.transaction(SOUND_STORE, mode);
+                const request = action(tx.objectStore(SOUND_STORE));
+                tx.oncomplete = () => resolve(request ? request.result : undefined);
+                tx.onerror = () => reject(tx.error || new Error('Sound storage error'));
+                tx.onabort = () => reject(tx.error || new Error('Sound storage aborted'));
+            }));
+        }
+
+        function readFileAsDataURL(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = () => reject(reader.error || new Error('Could not read file'));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function persistSound(type, file) {
+            try {
+                await soundStore('readwrite', store => store.put(file, type));
+                try { localStorage.removeItem(SOUND_LS_PREFIX + type); } catch (e) { }
+                return;
+            } catch (e) {
+                console.warn('IndexedDB unavailable for sounds, using localStorage', e);
+            }
+            // Fallback path — may throw if the file exceeds the storage quota,
+            // which the caller reports to the user.
+            const dataUrl = await readFileAsDataURL(file);
+            localStorage.setItem(SOUND_LS_PREFIX + type, dataUrl);
+        }
+
+        async function dropSound(type) {
+            try { await soundStore('readwrite', store => store.delete(type)); } catch (e) { }
+            try { localStorage.removeItem(SOUND_LS_PREFIX + type); } catch (e) { }
+        }
+
+        function setCustomSound(type, url, name) {
+            const prev = customSounds[type];
+            if (prev && prev.url && prev.url.indexOf('blob:') === 0) {
+                URL.revokeObjectURL(prev.url);
+            }
+            customSounds[type] = url ? { url: url, name: name || 'Custom sound' } : null;
+            updateSoundStatus(type);
+        }
+
+        function updateSoundStatus(type) {
+            const el = document.getElementById('soundStatus-' + type);
+            if (!el) return;
+            const s = customSounds[type];
+            if (s) {
+                el.textContent = 'Saved: ' + s.name;
+                el.title = s.name;
+                el.classList.add('has-custom');
+            } else {
+                el.textContent = 'Default beep';
+                el.title = '';
+                el.classList.remove('has-custom');
+            }
+        }
+
+        async function restoreSounds() {
+            for (const type of SOUND_TYPES) {
+                let url = null;
+                let name = '';
+
+                try {
+                    const blob = await soundStore('readonly', store => store.get(type));
+                    if (blob) {
+                        url = URL.createObjectURL(blob);
+                        name = blob.name || 'Custom sound';
+                    }
+                } catch (e) { /* IndexedDB not available — try localStorage */ }
+
+                if (!url) {
+                    try {
+                        const dataUrl = localStorage.getItem(SOUND_LS_PREFIX + type);
+                        if (dataUrl) { url = dataUrl; name = 'Custom sound'; }
+                    } catch (e) { }
+                }
+
+                if (url) setCustomSound(type, url, name);
+                else updateSoundStatus(type);
+            }
+        }
+
+        async function loadSound(input, type) {
+            const file = input.files && input.files[0];
+            if (!file) return;
+
+            // Swap the in-memory sound right away so it can be tested immediately.
+            setCustomSound(type, URL.createObjectURL(file), file.name);
+
+            try {
+                await persistSound(type, file);
+                showToast(`Custom ${type} sound saved`);
+            } catch (e) {
+                console.warn('Could not persist custom sound', e);
+                showToast('Sound too large to save — active for this session only');
+            }
+            input.value = '';   // allow re-picking the same file
+        }
+
+        function testSound(type) { playSound(type); }
+
+        async function resetSound(type) {
+            setCustomSound(type, null, '');
+            await dropSound(type);
+            showToast(`Reset ${type} sound`);
         }
 
         document.addEventListener('click', function initOnce() {
@@ -2325,6 +2489,7 @@ See the LICENSE file for details.
             document.getElementById('volDisplay').textContent = Math.round(globalVolume * 100) + '%';
             document.getElementById('themeSelect').value = currentTheme;
             document.getElementById('pauseOnBlurCheck').checked = pauseOnBlur;
+            SOUND_TYPES.forEach(updateSoundStatus);
             renderLayoutList();
         }
 
@@ -2338,24 +2503,6 @@ See the LICENSE file for details.
             globalVolume = parseFloat(val);
             document.getElementById('volDisplay').textContent = Math.round(globalVolume * 100) + '%';
             savePrefs();
-        }
-
-        function loadSound(input, type) {
-            const file = input.files && input.files[0];
-            if (!file) return;
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                customSounds[type] = e.target.result;
-                showToast(`Custom ${type} sound loaded`);
-            };
-            reader.readAsDataURL(file);
-        }
-
-        function testSound(type) { playSound(type); }
-
-        function resetSound(type) {
-            customSounds[type] = null;
-            showToast(`Reset ${type} sound`);
         }
 
         // ---------- Layout ----------
@@ -2505,6 +2652,7 @@ See the LICENSE file for details.
         renderDiffGrid();
         applyTheme(currentTheme);
         updateAll();
+        restoreSounds();                   // load any saved custom beeps from disk
 
         // Chart.js sizes its canvas from the parent element's client box.
         // On a warm-cache reload the script can run before the browser has
