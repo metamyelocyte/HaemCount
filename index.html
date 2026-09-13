@@ -527,6 +527,81 @@ See the LICENSE file for details.
     }
     .keybind-row input:focus { outline: 2px solid var(--accent); }
 
+    /* ---------- Backlog ---------- */
+    .backlog-save-row {
+        display: flex;
+        gap: 6px;
+        align-items: stretch;
+    }
+    .backlog-save-row input {
+        flex: 1;
+        min-width: 0;
+        padding: 4px 7px;
+        border: 1px solid var(--border);
+        border-radius: 3px;
+        background: var(--input-bg);
+        color: var(--text);
+        font-size: 11px;
+        height: 24px;
+    }
+    .backlog-list {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        max-height: 42vh;
+        overflow-y: auto;
+        padding-right: 2px;
+    }
+    .backlog-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: var(--menu-bg);
+    }
+    .backlog-item .info {
+        flex: 1;
+        min-width: 0;
+    }
+    .backlog-item .info .label {
+        font-weight: 700;
+        font-size: 11px;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .backlog-item .info .meta {
+        font-size: 9.5px;
+        color: var(--muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        margin-top: 1px;
+    }
+    .backlog-item button {
+        padding: 3px 9px;
+        font-size: 9.5px;
+        flex-shrink: 0;
+    }
+    .backlog-empty {
+        font-size: 10px;
+        color: var(--muted);
+        font-style: italic;
+        padding: 8px 0;
+        text-align: center;
+    }
+    .backlog-footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 6px;
+        margin-top: 12px;
+        padding-top: 10px;
+        border-top: 1px solid var(--border);
+    }
+
     .toast {
         position: fixed;
         bottom: 16px;
@@ -629,6 +704,7 @@ See the LICENSE file for details.
     <div class="menu">
         <span onclick="copyOutput()">Copy</span>
         <span onclick="confirmReset()">Reset</span>
+        <span onclick="openBacklog()">Backlog</span>
         <span onclick="openModal('preferencesModal')">Preferences</span>
         <span onclick="openModal('keysModal')">Customize Keys</span>
         <span onclick="openModal('aboutModal')">About</span>
@@ -700,6 +776,35 @@ See the LICENSE file for details.
         <p>Counting is paused because this window lost focus.<br>
            Focus this window to resume automatically.</p>
         <button type="button">Resume Counting</button>
+    </div>
+</div>
+
+<!-- Backlog -->
+<div id="backlogModal" class="modal">
+    <div class="modal-content" style="max-width: 560px;">
+        <span class="close" onclick="closeModal('backlogModal')">&times;</span>
+        <h2>Backlog</h2>
+
+        <div class="pref-section">
+            <h4>Save Current</h4>
+            <div class="backlog-save-row">
+                <input type="text" id="backlogLabelInput" placeholder="Label (e.g., Patient A)"
+                       maxlength="60"
+                       onkeydown="if(event.key==='Enter'){event.preventDefault();saveCurrentToBacklog();}">
+                <button onclick="saveCurrentToBacklog()">Save</button>
+            </div>
+            <p style="margin-top: 6px;">Saves the current counts, blood parameters, sample type and the Other label.</p>
+        </div>
+
+        <div class="pref-section">
+            <h4>Saved Entries</h4>
+            <div id="backlogList" class="backlog-list"></div>
+        </div>
+
+        <div class="backlog-footer">
+            <button class="secondary" onclick="confirmClearBacklog()">Clear All</button>
+            <button onclick="closeModal('backlogModal')">Close</button>
+        </div>
     </div>
 </div>
 
@@ -875,6 +980,182 @@ const SHIFT_MAP = {
     '^': '6', '&': '7', '*': '8', '(': '9', ')': '0'
 };
 
+// ---------- Backlog storage ----------
+const BACKLOG_KEY = 'haemcount.backlog.v1';
+
+function readBacklog() {
+    try {
+        const raw = localStorage.getItem(BACKLOG_KEY);
+        if (!raw) return [];
+        const arr = JSON.parse(raw);
+        return Array.isArray(arr) ? arr : [];
+    } catch (e) {
+        console.warn('Could not read backlog', e);
+        return [];
+    }
+}
+
+function writeBacklog(arr) {
+    try {
+        localStorage.setItem(BACKLOG_KEY, JSON.stringify(arr));
+        return true;
+    } catch (e) {
+        console.warn('Could not write backlog', e);
+        showToast('Could not save backlog');
+        return false;
+    }
+}
+
+function computeEntryTotal(entry) {
+    let total = 0;
+    const c = entry.counts || {};
+    ALL_CELLS.forEach(cell => {
+        if (entry.mode === 'peripheral' && cell.key === 'nRBC') return;
+        total += c[cell.key] || 0;
+    });
+    return total;
+}
+
+function openBacklog() {
+    renderBacklogList();
+    const input = document.getElementById('backlogLabelInput');
+    if (input) {
+        const backlog = readBacklog();
+        input.value = '';
+        input.placeholder = `Label (e.g., Sample ${backlog.length + 1})`;
+    }
+    openModal('backlogModal');
+}
+
+function saveCurrentToBacklog() {
+    const input = document.getElementById('backlogLabelInput');
+    if (!input) return;
+    let label = (input.value || '').trim();
+    const backlog = readBacklog();
+    if (!label) label = `Sample ${backlog.length + 1}`;
+
+    const entry = {
+        id: 'b' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+        label: label,
+        savedAt: new Date().toISOString(),
+        counts: Object.assign({}, counts),
+        mode: mode,
+        otherLabel: otherLabelValue,
+        params: {
+            hgb: document.getElementById('hgb').value,
+            mcv: document.getElementById('mcv').value,
+            wbc: document.getElementById('wbc').value,
+            plt: document.getElementById('plt').value
+        }
+    };
+    backlog.unshift(entry);
+    if (!writeBacklog(backlog)) return;
+    input.value = '';
+    input.placeholder = `Label (e.g., Sample ${backlog.length + 1})`;
+    renderBacklogList();
+    showToast(`Saved "${entry.label}"`);
+}
+
+function loadBacklogEntry(id) {
+    const backlog = readBacklog();
+    const entry = backlog.find(e => e.id === id);
+    if (!entry) return;
+    if (!withNativeDialog(() => confirm(`Load "${entry.label}"?\n\nThis will replace the current counts and parameters.`))) return;
+
+    // Apply counts
+    ALL_CELLS.forEach(c => { counts[c.key] = (entry.counts && entry.counts[c.key]) || 0; });
+
+    // Apply mode & other label
+    mode = (entry.mode === 'bone') ? 'bone' : 'peripheral';
+    otherLabelValue = entry.otherLabel || 'other';
+    const otherInput = document.getElementById('otherLabel');
+    if (otherInput) otherInput.value = otherLabelValue;
+
+    // Apply parameters
+    const p = entry.params || {};
+    ['hgb', 'mcv', 'wbc', 'plt'].forEach(k => {
+        if (p[k] !== undefined && p[k] !== null && p[k] !== '') {
+            const el = document.getElementById(k);
+            if (el) el.value = p[k];
+        }
+    });
+
+    // Re-render (renderDiffGrid uses current `mode` for radio checked state)
+    renderDiffGrid();
+    updateAll();
+    closeModal('backlogModal');
+    showToast(`Loaded "${entry.label}"`);
+}
+
+function deleteBacklogEntry(id) {
+    const backlog = readBacklog();
+    const entry = backlog.find(e => e.id === id);
+    if (!entry) return;
+    if (!withNativeDialog(() => confirm(`Delete "${entry.label}"?`))) return;
+    writeBacklog(backlog.filter(e => e.id !== id));
+    renderBacklogList();
+    showToast('Entry deleted');
+}
+
+function confirmClearBacklog() {
+    const backlog = readBacklog();
+    if (backlog.length === 0) { showToast('Backlog already empty'); return; }
+    if (!withNativeDialog(() => confirm('Delete all backlog entries?\n\nThis cannot be undone.'))) return;
+    writeBacklog([]);
+    renderBacklogList();
+    showToast('Backlog cleared');
+}
+
+function renderBacklogList() {
+    const container = document.getElementById('backlogList');
+    if (!container) return;
+    const backlog = readBacklog();
+
+    if (backlog.length === 0) {
+        container.innerHTML = '<div class="backlog-empty">No saved entries yet.</div>';
+        return;
+    }
+
+    container.innerHTML = '';
+    backlog.forEach(entry => {
+        const total = computeEntryTotal(entry);
+        const dt = new Date(entry.savedAt);
+        const timeStr = isNaN(dt.getTime()) ? '' : dt.toLocaleString();
+        const modeStr = (entry.mode === 'bone') ? 'Bone marrow' : 'Peripheral blood';
+
+        const item = document.createElement('div');
+        item.className = 'backlog-item';
+
+        const info = document.createElement('div');
+        info.className = 'info';
+        const lbl = document.createElement('div');
+        lbl.className = 'label';
+        lbl.textContent = entry.label;
+        lbl.title = entry.label;
+        const meta = document.createElement('div');
+        meta.className = 'meta';
+        meta.textContent = `${timeStr}  •  ${total} cells  •  ${modeStr}`;
+        info.appendChild(lbl);
+        info.appendChild(meta);
+
+        const loadBtn = document.createElement('button');
+        loadBtn.textContent = 'Load';
+        loadBtn.title = 'Load this entry';
+        loadBtn.onclick = () => loadBacklogEntry(entry.id);
+
+        const delBtn = document.createElement('button');
+        delBtn.className = 'secondary';
+        delBtn.textContent = '✕';
+        delBtn.title = 'Delete this entry';
+        delBtn.onclick = () => deleteBacklogEntry(entry.id);
+
+        item.appendChild(info);
+        item.appendChild(loadBtn);
+        item.appendChild(delBtn);
+        container.appendChild(item);
+    });
+}
+
 // ---------- Audio ----------
 function initAudio() {
     if (!audioCtx) {
@@ -921,9 +1202,9 @@ document.addEventListener('click', function initOnce() {
 
 // ---------- Pause on window blur ----------
 let paused = false;
-let pauseOnBlur = true;                // user-toggleable in Preferences
-let nativeDialogOpen = false;          // true while a confirm/alert dialog blocks JS
-let nativeDialogClosedAt = 0;          // timestamp of the most recent dialog close
+let pauseOnBlur = true;
+let nativeDialogOpen = false;
+let nativeDialogClosedAt = 0;
 
 function pauseCounting() {
     if (paused) return;
@@ -942,8 +1223,6 @@ function resumeCounting() {
     if (wasPaused) showToast('Counting resumed');
 }
 
-// Wrap native confirm()/alert() calls so the pause overlay is suppressed
-// for the entire duration the dialog is up AND for a short cooldown after.
 function withNativeDialog(fn) {
     nativeDialogOpen = true;
     let result;
@@ -961,14 +1240,13 @@ window.addEventListener('blur', () => {
     setTimeout(() => {
         if (!pauseOnBlur) return;
         if (document.hasFocus()) return;
-        if (document.querySelector('.modal.open')) return;   // our own modal blocks input
-        if (nativeDialogOpen) return;                        // native dialog currently open
-        if (Date.now() - nativeDialogClosedAt < 1200) return; // just closed a native dialog
+        if (document.querySelector('.modal.open')) return;
+        if (nativeDialogOpen) return;
+        if (Date.now() - nativeDialogClosedAt < 1200) return;
         pauseCounting();
     }, 150);
 });
 
-// Auto-resume as soon as the window regains focus — no click required.
 window.addEventListener('focus', () => {
     if (paused) resumeCounting();
 });
@@ -1049,12 +1327,12 @@ function renderDiffGrid() {
         grid.appendChild(div);
     });
 
-    // Mode radios as the final grid item
+    // Mode radios as the final grid item (checked state follows the current `mode`)
     const modeDiv = document.createElement('div');
     modeDiv.className = 'mode-cell';
     modeDiv.innerHTML = `
-        <label><input type="radio" name="mode" value="bone" onchange="changeSampleType('bone')"> Bone marrow</label>
-        <label><input type="radio" name="mode" value="peripheral" checked onchange="changeSampleType('peripheral')"> Peripheral blood</label>
+        <label><input type="radio" name="mode" value="bone" ${mode === 'bone' ? 'checked' : ''} onchange="changeSampleType('bone')"> Bone marrow</label>
+        <label><input type="radio" name="mode" value="peripheral" ${mode === 'peripheral' ? 'checked' : ''} onchange="changeSampleType('peripheral')"> Peripheral blood</label>
         <div class="ratio" id="ratioBox" style="display:none;">M:E ratio: <strong id="meRatio">—</strong></div>
     `;
     grid.appendChild(modeDiv);
@@ -1086,7 +1364,7 @@ function getTotal() {
 }
 
 function change(key, delta) {
-    if (paused) return;                       // ignore all counting while paused
+    if (paused) return;
     if (delta < 0 && counts[key] <= 0) return;
     counts[key] = (counts[key] || 0) + delta;
     if (delta > 0) {
@@ -1243,7 +1521,6 @@ function generateOutput() {
     }
 
     // "Total cells counted" intentionally omitted from clipboard output
-    // (it is still shown in the status bar).
     return lines.join('\n');
 }
 
@@ -1281,7 +1558,6 @@ function showToast(msg) {
 
 // ---------- Reset with confirmation ----------
 function confirmReset() {
-    // Native confirm — wrapped so the pause overlay doesn't fire.
     if (withNativeDialog(() => confirm('Reset all counts? This cannot be undone.'))) {
         resetAll();
     }
@@ -1299,6 +1575,7 @@ function openModal(id) {
     document.getElementById(id).classList.add('open');
     if (id === 'keysModal') renderKeybinds();
     if (id === 'preferencesModal') initPreferences();
+    if (id === 'backlogModal') renderBacklogList();
 }
 function closeModal(id) { document.getElementById(id).classList.remove('open'); }
 document.querySelectorAll('.modal').forEach(m => {
@@ -1319,10 +1596,7 @@ function initPreferences() {
 
 function setPauseOnBlur(enabled) {
     pauseOnBlur = !!enabled;
-    if (!pauseOnBlur && paused) {
-        // Immediately clear any active pause when the feature is turned off.
-        resumeCounting();
-    }
+    if (!pauseOnBlur && paused) resumeCounting();
 }
 
 function updateVolume(val) {
@@ -1452,7 +1726,7 @@ function saveKeybinds() {
 
 // ---------- Keyboard shortcuts ----------
 document.addEventListener('keydown', (e) => {
-    if (paused) return;                                   // no counting while paused
+    if (paused) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
     if (e.target.isContentEditable) return;
     if (document.querySelector('.modal.open')) return;
