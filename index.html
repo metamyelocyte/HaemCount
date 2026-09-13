@@ -764,7 +764,7 @@ See the LICENSE file for details.
 
     <div class="statusbar">
         <span>Total cells counted: <strong id="totalCount">0</strong></span>
-        <span>HaemCount</span>
+        <span>HaemCount v1.0</span>
     </div>
 </div>
 
@@ -876,7 +876,7 @@ See the LICENSE file for details.
     <div class="modal-content">
         <span class="close" onclick="closeModal('aboutModal')">&times;</span>
         <h2>About HaemCount</h2>
-        <p><strong>HaemCount</strong> — a web reimplementation of the HEMCOUNT differential cell counter.</p>
+        <p><strong>HaemCount v1.0</strong> — a web reimplementation of the HEMCOUNT differential cell counter.</p>
         <p><strong>Author:</strong> Tiffany Lau (2026)</p>
         <p>Inspired by the original <strong>HEMCOUNT</strong> by Nelson Chan
            (<a href="https://github.com/nelsonchanhk/HEMCOUNT" target="_blank" rel="noopener">@nelsonchanhk</a>).</p>
@@ -900,7 +900,8 @@ See the LICENSE file for details.
 const ALL_CELLS = [
     { key: 'eos',    dispName: 'Eosinophil',    name: 'eosinophils',    short: 'Eos',    type: 'myeloid'   },
     { key: 'baso',   dispName: 'Basophil',      name: 'basophils',      short: 'Baso',   type: 'myeloid'   },
-    { key: 'mono',   dispName: 'Other',         name: 'monocytes',      short: 'Other',  type: 'mono'      },
+    { key: 'other',  dispName: 'Other',         name: 'other cells',    short: 'Other',  type: 'other'     },
+    { key: 'mono',   dispName: 'Monocyte',      name: 'monocytes',      short: 'Mono',   type: 'mono'      },
     { key: 'band',   dispName: 'Neutrophil',    name: 'neutrophils',    short: 'Neu',    type: 'myeloid'   },
     { key: 'lym',    dispName: 'Lymphocyte',    name: 'lymphocytes',    short: 'Lym',    type: 'lymphoid'  },
     { key: 'plasma', dispName: 'Plasma cell',   name: 'plasma cells',   short: 'Plasma', type: 'other'     },
@@ -911,7 +912,7 @@ const ALL_CELLS = [
     { key: 'nRBC',   dispName: 'Nucleated RBC', name: 'nRBCs',          short: 'nRBC',   type: 'erythroid' },
 ];
 
-const HIST_ORDER = ['blast','promy','mye','meta','band','lym','mono','eos','baso','plasma','nRBC'];
+const HIST_ORDER = ['blast','promy','mye','meta','band','lym','mono','other','eos','baso','plasma','nRBC'];
 
 const THEMES = {
     light: {
@@ -970,14 +971,15 @@ const SECTION_NAMES = {
 };
 
 let keyMap = {
-    '0': 'lym', '1': 'band', '2': 'eos', '3': 'baso', '4': 'promy',
-    '5': 'mye', '6': 'meta', '7': 'mono', '8': 'plasma', '9': 'nRBC',
-    '+': 'blast'
+    '0': 'lym',   '.': 'band',  '1': 'baso',  '2': 'eos',   '3': 'mono',
+    '4': 'promy', '5': 'mye',   '6': 'meta',  '7': 'other', '8': 'plasma',
+    '9': 'nRBC',  '+': 'blast'
 };
 
 const SHIFT_MAP = {
     '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
-    '^': '6', '&': '7', '*': '8', '(': '9', ')': '0'
+    '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
+    '>': '.'
 };
 
 // ---------- Backlog storage ----------
@@ -1292,7 +1294,7 @@ function getKeyForCell(cellKey) {
 
 function getCellLabel(cell) {
     const k = getKeyForCell(cell.key);
-    const dispName = (cell.key === 'mono') ? capitalize(otherLabelValue || 'other') : cell.dispName;
+    const dispName = (cell.key === 'other') ? capitalize(otherLabelValue || 'other') : cell.dispName;
     return k ? `${dispName} (${k})` : dispName;
 }
 
@@ -1493,7 +1495,7 @@ function generateOutput() {
             let diffStr = '';
             nonZero.forEach((c, i) => {
                 const pct = total > 0 ? ((counts[c.key] / total) * 100).toFixed(0) : 0;
-                const dispName = (c.key === 'mono') ? (otherLabelValue || 'other') + 's' : c.name;
+                const dispName = (c.key === 'other') ? (otherLabelValue || 'other') + 's' : c.name;
                 if (i === 0) diffStr += `${dispName} ${pct}%`;
                 else if (i === nonZero.length - 1) diffStr += ` and ${dispName} ${pct}%`;
                 else diffStr += `, ${dispName} ${pct}%`;
