@@ -1559,14 +1559,27 @@ function showToast(msg) {
 }
 
 // ---------- Reset with confirmation ----------
+// ---------- Reset with confirmation ----------
 function confirmReset() {
-    if (withNativeDialog(() => confirm('Reset all counts? This cannot be undone.'))) {
+    if (withNativeDialog(() => confirm(
+        'Reset all counts and restore the "Other" label?\n\nThis cannot be undone.'
+    ))) {
         resetAll();
     }
 }
 
 function resetAll() {
+    // 1. Counts back to zero
     initCounts();
+
+    // 2. "Other" label back to its default
+    otherLabelValue = 'other';
+    const otherInput = document.getElementById('otherLabel');
+    if (otherInput) otherInput.value = 'other';
+
+    // 3. Keep whatever theme the user is currently on
+    applyTheme(currentTheme);
+
     renderDiffGrid();
     updateAll();
     showToast('Counts reset');
