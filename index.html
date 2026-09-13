@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HaemCount</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🩸</text></svg>">
     <!--
 HaemCount — a web reimplementation of the HEMCOUNT differential cell counter
 Copyright (C) 2026  Tiffany Lau
@@ -118,28 +119,14 @@ See the LICENSE file for details.
             min-height: min-content;
         }
 
-        /* Shared grid template: 3 columns, shared by top-section and diff-grid */
+        /* Shared grid template: locked to 3 columns.
+           minmax(0, 1fr) lets the tracks shrink below their content width,
+           so the grid never reflows to 2 or 1 column — the cells just get tighter. */
         .top-section,
         .diff-grid {
             display: grid;
-            grid-template-columns: repeat(3, minmax(140px, 1fr));
+            grid-template-columns: repeat(3, minmax(0, 1fr));
             gap: 4px;
-        }
-
-        @media (max-width: 640px) {
-
-            .top-section,
-            .diff-grid {
-                grid-template-columns: 1fr 1fr;
-            }
-        }
-
-        @media (max-width: 420px) {
-
-            .top-section,
-            .diff-grid {
-                grid-template-columns: 1fr;
-            }
         }
 
         .top-section {
@@ -150,7 +137,7 @@ See the LICENSE file for details.
         .params-grid {
             grid-column: 1 / -1;
             display: grid;
-            grid-template-columns: max-content 1fr;
+            grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
             gap: 3px 8px;
             align-items: center;
             font-size: 11.5px;
@@ -160,6 +147,9 @@ See the LICENSE file for details.
             color: var(--text);
             white-space: nowrap;
             cursor: pointer;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         /* Field wrapper keeps the unit glued to its input box */
@@ -173,7 +163,8 @@ See the LICENSE file for details.
 
         .param-field input[type="number"] {
             width: 92px;
-            flex: 0 0 auto;
+            max-width: 100%;
+            flex: 0 1 92px;
             padding: 2px 6px;
             border: 1px solid var(--border);
             border-radius: 3px;
@@ -201,6 +192,7 @@ See the LICENSE file for details.
             background: var(--menu-bg);
             min-height: 26px;
             overflow: hidden;
+            min-width: 0;
         }
 
         .diff-cell .cell-label {
@@ -390,7 +382,7 @@ See the LICENSE file for details.
             color: var(--muted);
             text-align: right;
             flex-shrink: 0;
-            min-width: 28px;
+            min-width: 26px;
             padding-left: 2px;
         }
 
@@ -434,17 +426,18 @@ See the LICENSE file for details.
             border-radius: 3px;
             background: var(--panel);
             padding: 4px 6px;
-            flex: 1 1 auto;
+            flex: 1 1 0;
             display: flex;
             flex-direction: column;
-            min-height: 90px;
+            min-height: 72px;
         }
 
         .hist-container {
             position: relative;
-            flex: 1;
+            flex: 1 1 0;
             width: 100%;
-            min-height: 70px;
+            min-height: 52px;
+            overflow: hidden;
         }
 
         /* Output panel */
@@ -453,10 +446,10 @@ See the LICENSE file for details.
             border-radius: 3px;
             background: var(--panel);
             padding: 4px 6px;
-            flex: 1 1 auto;
+            flex: 1 1 0;
             display: flex;
             flex-direction: column;
-            min-height: 80px;
+            min-height: 64px;
         }
 
         .output-header {
@@ -1073,6 +1066,107 @@ See the LICENSE file for details.
             padding: 10px 20px 14px;
             border-top: 1px solid var(--border);
             background: var(--menu-bg);
+        }
+
+        /* ---------- Small-window fallbacks ----------
+           Panels shrink before the page is allowed to scroll. */
+        @media (max-width: 640px) {
+            .main {
+                padding: 4px 6px;
+                gap: 4px;
+            }
+
+            .titlebar {
+                padding: 3px 8px;
+            }
+
+            .menu {
+                gap: 12px;
+                padding: 3px 8px;
+            }
+
+            .statusbar {
+                padding: 3px 8px;
+            }
+        }
+
+        /* Keep 3 diff columns down to ~320px by trimming the fixed-width parts */
+        @media (max-width: 400px) {
+            .diff-cell {
+                padding: 2px 4px;
+                gap: 2px;
+            }
+
+            .diff-cell .cell-label {
+                font-size: 9px;
+            }
+
+            .diff-cell .count-box {
+                width: 26px;
+            }
+
+            .diff-cell .spinner button {
+                width: 14px;
+            }
+
+            .diff-cell .pct {
+                min-width: 22px;
+                font-size: 9px;
+            }
+        }
+
+        @media (max-height: 640px) {
+            .hist-panel {
+                min-height: 58px;
+            }
+
+            .hist-container {
+                min-height: 40px;
+            }
+
+            .output-panel {
+                min-height: 52px;
+            }
+        }
+
+        @media (max-height: 520px) {
+            .main {
+                padding: 3px 5px;
+                gap: 3px;
+            }
+
+            .titlebar,
+            .menu,
+            .statusbar {
+                padding: 2px 8px;
+            }
+
+            .hist-panel,
+            .output-panel {
+                padding: 3px 5px;
+            }
+
+            .hist-panel {
+                min-height: 48px;
+            }
+
+            .hist-container {
+                min-height: 32px;
+            }
+
+            .output-panel {
+                min-height: 42px;
+            }
+
+            .output-header {
+                font-size: 9.5px;
+                margin-bottom: 2px;
+            }
+
+            .diff-cell {
+                min-height: 22px;
+                padding: 2px 4px;
+            }
         }
 
         ::-webkit-scrollbar {
@@ -2405,6 +2499,16 @@ See the LICENSE file for details.
         renderDiffGrid();
         applyTheme(currentTheme);
         updateAll();
+
+        // Chart.js sizes its canvas from the parent element's client box.
+        // On a warm-cache reload the script can run before the browser has
+        // finished laying out the flex column, so the canvas briefly reads a
+        // default 300x150 size, which inflates the histogram panel. Rebuild
+        // the chart once layout has actually settled (two rAFs = one paint).
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (chart) { chart.destroy(); chart = null; }
+            updateHistogram();
+        }));
 
         ['hgb', 'mcv', 'wbc', 'plt'].forEach(id => {
             document.getElementById(id).addEventListener('input', updateOutput);
