@@ -970,11 +970,64 @@ const SECTION_NAMES = {
     output: 'Output Preview'
 };
 
-let keyMap = {
+// ---------- Default keybinds ----------
+const DEFAULT_KEY_MAP = {
     '0': 'lym',   '.': 'band',  '1': 'baso',  '2': 'eos',   '3': 'mono',
     '4': 'promy', '5': 'mye',   '6': 'meta',  '7': 'other', '8': 'plasma',
     '9': 'nRBC',  '+': 'blast'
 };
+let keyMap = Object.assign({}, DEFAULT_KEY_MAP);
+
+// ---------- Preferences storage (persists across reloads) ----------
+const PREFS_KEY = 'haemcount.prefs.v1';
+
+function savePrefs() {
+    try {
+        localStorage.setItem(PREFS_KEY, JSON.stringify({
+            volume: globalVolume,
+            theme: currentTheme,
+            keybinds: keyMap,
+            pauseOnBlur: pauseOnBlur
+        }));
+    } catch (e) {
+        console.warn('Could not save preferences', e);
+    }
+}
+
+function loadPrefs() {
+    let prefs = null;
+    try {
+        const raw = localStorage.getItem(PREFS_KEY);
+        prefs = raw ? JSON.parse(raw) : null;
+    } catch (e) {
+        console.warn('Could not read preferences', e);
+    }
+    if (!prefs || typeof prefs !== 'object') prefs = {};
+
+    // Volume
+    const v = parseFloat(prefs.volume);
+    globalVolume = isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5;
+
+    // Theme
+    currentTheme = Object.prototype.hasOwnProperty.call(THEMES, prefs.theme) ? prefs.theme : 'light';
+
+    // Keybinds (validated, falls back to defaults)
+    keyMap = Object.assign({}, DEFAULT_KEY_MAP);
+    if (prefs.keybinds && typeof prefs.keybinds === 'object') {
+        const validCells = ALL_CELLS.map(c => c.key);
+        const cleaned = {};
+        Object.keys(prefs.keybinds).forEach(k => {
+            const cellKey = prefs.keybinds[k];
+            if (typeof k === 'string' && k.length === 1 && validCells.indexOf(cellKey) !== -1) {
+                cleaned[k] = cellKey;
+            }
+        });
+        keyMap = cleaned;
+    }
+
+    // Pause-on-blur
+    pauseOnBlur = !!prefs.pauseOnBlur;
+}
 
 const SHIFT_MAP = {
     '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
@@ -1261,7 +1314,7 @@ document.addEventListener('visibilitychange', () => {
 // ---------- Themes ----------
 function applyTheme(name) {
     const t = THEMES[name] || THEMES.light;
-    currentTheme = name;
+    currentTheme = THEMES[name] ? name : 'light';
     const r = document.documentElement;
     r.style.setProperty('--bg', t.bg);
     r.style.setProperty('--panel', t.panel);
@@ -1277,6 +1330,7 @@ function applyTheme(name) {
     r.style.setProperty('--toast-bg', t.toastBg);
     r.style.setProperty('--toast-text', t.toastText);
     if (chart) updateHistogram();
+    savePrefs();
 }
 
 // ---------- Core ----------
@@ -1559,7 +1613,6 @@ function showToast(msg) {
 }
 
 // ---------- Reset with confirmation ----------
-// ---------- Reset with confirmation ----------
 function confirmReset() {
     if (withNativeDialog(() => confirm(
         'Reset all counts and restore the "Other" label?\n\nThis cannot be undone.'
@@ -1612,11 +1665,13 @@ function initPreferences() {
 function setPauseOnBlur(enabled) {
     pauseOnBlur = !!enabled;
     if (!pauseOnBlur && paused) resumeCounting();
+    savePrefs();
 }
 
 function updateVolume(val) {
     globalVolume = parseFloat(val);
     document.getElementById('volDisplay').textContent = Math.round(globalVolume * 100) + '%';
+    savePrefs();
 }
 
 function loadSound(input, type) {
@@ -1733,6 +1788,7 @@ function saveKeybinds() {
     });
     if (!hasError) {
         keyMap = newKeyMap;
+        savePrefs();
         renderDiffGrid();
         closeModal('keysModal');
         showToast('Keybinds saved');
@@ -1779,8 +1835,9 @@ function changeSampleType(val) {
 
 // ---------- Initialize ----------
 initCounts();
+loadPrefs();                       // restore volume, theme, keybinds (+ pause-on-blur) before rendering
 renderDiffGrid();
-applyTheme('light');
+applyTheme(currentTheme);
 updateAll();
 
 ['hgb','mcv','wbc','plt'].forEach(id => {
