@@ -49,10 +49,12 @@ See the LICENSE file for details.
         .app {
             width: 100vw;
             height: 100vh;
+            height: 100dvh;
             background: var(--bg);
             display: flex;
             flex-direction: column;
-            overflow: hidden;
+            overflow-x: hidden;
+            overflow-y: auto;
             transition: filter 0.2s ease, opacity 0.2s ease;
         }
 
@@ -107,13 +109,13 @@ See the LICENSE file for details.
 
         /* Main content */
         .main {
-            flex: 1;
+            flex: 1 1 auto;
             display: flex;
             flex-direction: column;
             padding: 6px 8px;
             gap: 5px;
-            overflow: hidden;
-            min-height: 0;
+            overflow: visible;
+            min-height: min-content;
         }
 
         /* Shared grid template: 3 columns, shared by top-section and diff-grid */
@@ -212,29 +214,14 @@ See the LICENSE file for details.
         }
 
         /* Inline-editable "Other" name inside its diff cell */
-        /* Inline-editable "Other" name inside its diff cell */
         .diff-cell .editable-label {
             outline: none;
             padding: 0 1px;
             border-radius: 2px;
-            /* The dashed underline is now always visible so the field reads as editable */
+            /* The dashed underline is always visible so the field reads as editable */
             border-bottom: 1px dashed var(--muted);
             cursor: text;
             transition: background 0.12s, border-color 0.12s;
-        }
-
-        /* Small pencil glyph pinned after the label as a visual "you can edit this" cue */
-        .diff-cell .editable-label::after {
-            content: '✎';
-            margin-left: 3px;
-            font-size: 8px;
-            line-height: 1;
-            color: var(--accent);
-            opacity: 0.7;
-            vertical-align: 1px;
-            pointer-events: none;
-            /* clicks still land on the editable span */
-            transition: opacity 0.12s;
         }
 
         .diff-cell .editable-label:hover {
@@ -242,18 +229,10 @@ See the LICENSE file for details.
             background: var(--input-bg);
         }
 
-        .diff-cell .editable-label:hover::after {
-            opacity: 1;
-        }
-
         .diff-cell .editable-label:focus {
             border-bottom-color: var(--accent);
             background: var(--input-bg);
             box-shadow: 0 0 0 1px var(--accent);
-        }
-
-        .diff-cell .editable-label:focus::after {
-            opacity: 1;
         }
 
         /* ---------- First-visit hint for the editable "Other" label ---------- */
@@ -455,7 +434,7 @@ See the LICENSE file for details.
             border-radius: 3px;
             background: var(--panel);
             padding: 4px 6px;
-            flex: 1;
+            flex: 1 1 auto;
             display: flex;
             flex-direction: column;
             min-height: 90px;
@@ -474,7 +453,7 @@ See the LICENSE file for details.
             border-radius: 3px;
             background: var(--panel);
             padding: 4px 6px;
-            flex: 1;
+            flex: 1 1 auto;
             display: flex;
             flex-direction: column;
             min-height: 80px;
