@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HEMCOUNT v1.0 Web</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #f0f0f0;
+            --panel: #ffffff;
+            --border: #cccccc;
+            --accent: #2c7be5;
+            --danger: #e74c3c;
+            --text: #222222;
+            --muted: #666666;
+            --titlebar: #3a3a3a;
+            --titlebar-text: #ffffff;
+            --menu-bg: #fafafa;
+            --input-bg: #ffffff;
+            --toast-bg: #333333;
+            --toast-text: #ffffff;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            padding: 16px;
+            height: 100vh;
+            overflow: hidden;
+        }
+        .app {
+            width: 100%;
+            max-width: 900px;
+            height: 100%;
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        .titlebar {
+            background: var(--titlebar);
+            color: var(--titlebar-text);
+            padding: 8px 16px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .titlebar .close { cursor: pointer; opacity: 0.7; }
+        .titlebar .close:hover { opacity: 1; }
+        .menu {
+            display: flex;
+            gap: 16px;
+            padding: 6px 16px;
+            background: var(--menu-bg);
+            border-bottom: 1px solid var(--border);
+            font-size: 0.85rem;
+            color: var(--muted);
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .menu span { cursor: pointer; user-select: none; }
+        .menu span:hover { color: var(--accent); }
+
+        .main {
+            flex: 1;
+            overflow-y: auto;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .panel {
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 10px;
+            background: var(--panel);
+            flex-shrink: 0;
+        }
+        .panel h3 {
+            font-size: 0.8rem;
+            margin-bottom: 8px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 4px;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+        }
+        .panel h3 .hint {
+            font-size: 0.68rem;
+            font-weight: normal;
+            text-transform: none;
+            letter-spacing: 0;
+            color: var(--muted);
+            opacity: 0.8;
+            font-style: italic;
+        }
+
+        /* Differential Grid */
+        .diff-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 6px;
+        }
+        .diff-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 5px 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--menu-bg);
+            height: 34px;
+        }
+        .diff-item .label {
+            font-size: 0.78rem;
+            flex: 1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .diff-item .count {
+            font-weight: 700;
+            min-width: 30px;
+            text-align: center;
+            font-size: 0.85rem;
+            cursor: text;
+            padding: 1px 3px;
+            border-radius: 3px;
+            transition: background 0.1s;
+        }
+        .diff-item .count:hover {
+            background: var(--border);
+        }
+        .diff-item .count:focus {
+            outline: 2px solid var(--accent);
+            outline-offset: 0;
+            background: var(--input-bg);
+            cursor: text;
+        }
+        .diff-item .pct {
+            font-size: 0.72rem;
+            color: var(--muted);
+            width: 34px;
+            text-align: right;
+        }
+        .diff-item .btns { display: flex; gap: 3px; }
+        .diff-item button {
+            width: 20px; height: 20px;
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--panel);
+            color: var(--text);
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.1s;
+        }
+        .diff-item button:hover { background: var(--border); }
+        .diff-item button.inc { color: #27ae60; }
+        .diff-item button.dec { color: var(--danger); }
+
+        /* Cell Counting / Parameters */
+        .params-layout {
+            display: flex;
+            gap: 20px;
+        }
+        .params-fields { flex: 1; }
+        .params-mode {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 8px;
+        }
+        .field-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .field-row label {
+            width: 140px;
+            font-size: 0.82rem;
+        }
+        .field-row input {
+            width: 90px;
+            padding: 3px 6px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 0.82rem;
+            text-align: right;
+        }
+        .field-row .unit {
+            margin-left: 6px;
+            font-size: 0.72rem;
+            color: var(--muted);
+            width: 48px;
+        }
+        .mode-options {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 0.85rem;
+        }
+        .mode-options label {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            cursor: pointer;
+        }
+        .ratio-box {
+            padding: 6px;
+            background: rgba(44, 123, 229, 0.1);
+            border-radius: 4px;
+            font-size: 0.8rem;
+            text-align: center;
+        }
+        .ratio-box strong { color: var(--accent); }
+
+        /* Histogram */
+        .hist-container {
+            position: relative;
+            height: 150px;
+            width: 100%;
+        }
+
+        /* Output */
+        .output-box {
+            padding: 8px;
+            background: var(--panel);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 0.72rem;
+            white-space: pre-wrap;
+            line-height: 1.4;
+            max-height: 130px;
+            overflow-y: auto;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .output-box:hover {
+            background: var(--menu-bg);
+            border-color: var(--accent);
+        }
+        .output-box:active {
+            background: var(--border);
+        }
+
+        .footer {
+            padding: 5px 16px;
+            background: var(--menu-bg);
+            border-top: 1px solid var(--border);
+            font-size: 0.75rem;
+            color: var(--muted);
+            display: flex;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        /* Modals */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0; top: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.4);
+        }
+        .modal-content {
+            background-color: var(--panel);
+            color: var(--text);
+            margin: 6% auto;
+            padding: 22px;
+            border: 1px solid var(--border);
+            width: 90%;
+            max-width: 520px;
+            border-radius: 8px;
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            max-height: 82vh;
+            overflow-y: auto;
+        }
+        .modal-content .close {
+            position: absolute;
+            right: 14px; top: 10px;
+            font-size: 24px;
+            cursor: pointer;
+            color: var(--muted);
+        }
+        .modal-content .close:hover { color: var(--text); }
+        .modal-content h2 {
+            margin-bottom: 14px;
+            font-size: 1.05rem;
+            color: var(--text);
+        }
+        .modal-content p {
+            margin-bottom: 8px;
+            font-size: 0.85rem;
+            line-height: 1.4;
+            color: var(--muted);
+        }
+        .modal-content button {
+            padding: 6px 12px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.82rem;
+        }
+        .modal-content button:hover { filter: brightness(0.9); }
+        .modal-content button.secondary {
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        .modal-content button.secondary:hover { background: var(--border); }
+
+        .pref-section {
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        .pref-section:last-child { border-bottom: none; margin-bottom: 0; }
+        .pref-section h4 {
+            font-size: 0.8rem;
+            margin-bottom: 8px;
+            color: var(--text);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .pref-section select {
+            padding: 4px 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 0.85rem;
+            width: 100%;
+        }
+        .volume-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .volume-row input[type="range"] { flex: 1; }
+        .sound-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 6px;
+            font-size: 0.82rem;
+        }
+        .sound-row label { flex: 1; }
+        .sound-row input[type="file"] {
+            max-width: 130px;
+            font-size: 0.72rem;
+            color: var(--text);
+        }
+        .sound-row button { padding: 3px 8px; font-size: 0.75rem; }
+
+        .layout-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 5px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.85rem;
+        }
+        .layout-row:last-child { border-bottom: none; }
+        .layout-row span { flex: 1; }
+        .layout-row button {
+            padding: 2px 8px;
+            font-size: 0.8rem;
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+        .layout-row button:hover:not(:disabled) { background: var(--border); }
+        .layout-row input[type="checkbox"] { cursor: pointer; }
+
+        .keybind-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 4px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 0.82rem;
+        }
+        .keybind-row label { flex: 1; }
+        .keybind-row input {
+            width: 40px;
+            text-align: center;
+            padding: 2px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-family: monospace;
+            font-size: 0.9rem;
+        }
+        .keybind-row input:focus { outline: 2px solid var(--accent); }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--toast-bg);
+            color: var(--toast-text);
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 2000;
+        }
+        .toast.show { opacity: 1; }
+    </style>
+</head>
+<body>
+<div class="app">
+    <div class="titlebar">
+        <span>HEMCOUNT v1.0 Web</span>
+        <span class="close" onclick="if(confirm('Reset all counts?')) resetAll()">✕</span>
+    </div>
+    
+    <div class="menu">
+        <span onclick="copyOutput()">Copy</span>
+        <span onclick="resumeCounting()">Resume Counting</span>
+        <span onclick="resetAll()">Reset</span>
+        <span onclick="openModal('preferencesModal')">Preferences</span>
+        <span onclick="openModal('keysModal')">Customize Keys</span>
+        <span onclick="openModal('aboutModal')">About</span>
+    </div>
+
+    <div class="main" id="mainArea">
+        <div class="panel" data-section="diff">
+            <h3>Differential Count <span class="hint">click a number to type a value</span></h3>
+            <div class="diff-grid" id="diffGrid"></div>
+        </div>
+
+        <div class="panel" data-section="params">
+            <h3>Cell Counting</h3>
+            <div class="params-layout">
+                <div class="params-fields">
+                    <div class="field-row">
+                        <label>Haemoglobin</label>
+                        <input type="number" id="hgb" value="8.9" step="0.1" min="0">
+                        <span class="unit">g/dL</span>
+                    </div>
+                    <div class="field-row">
+                        <label>Mean Corpuscular Volume</label>
+                        <input type="number" id="mcv" value="93.4" step="0.1" min="0">
+                        <span class="unit">fL</span>
+                    </div>
+                    <div class="field-row">
+                        <label>White blood cells</label>
+                        <input type="number" id="wbc" value="289.1" step="0.1" min="0">
+                        <span class="unit">×10⁹/L</span>
+                    </div>
+                    <div class="field-row">
+                        <label>Platelets</label>
+                        <input type="number" id="plt" value="500" step="1" min="0">
+                        <span class="unit">×10⁹/L</span>
+                    </div>
+                </div>
+                <div class="params-mode">
+                    <div class="mode-options">
+                        <label>
+                            <input type="radio" name="mode" value="peripheral" checked onchange="changeSampleType('peripheral')">
+                            Peripheral blood
+                        </label>
+                        <label>
+                            <input type="radio" name="mode" value="bone" onchange="changeSampleType('bone')">
+                            Bone marrow
+                        </label>
+                    </div>
+                    <div class="ratio-box" id="ratioBox">
+                        M:E ratio: <strong id="meRatio">—</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel" data-section="hist">
+            <h3>Histogram</h3>
+            <div class="hist-container">
+                <canvas id="histChart"></canvas>
+            </div>
+        </div>
+
+        <div class="panel" data-section="output">
+            <h3>Output Preview <span class="hint">click to copy</span></h3>
+            <div class="output-box" id="outputBox" onclick="copyOutput()" title="Click to copy to clipboard">Clipboard output preview (click or press Enter to copy)...</div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <span>Total cells counted: <strong id="totalCount">0</strong></span>
+        <span>HEMCOUNT web reimplementation (GPLv3 inspired)</span>
+    </div>
+</div>
+
+<!-- Modals -->
+<div id="preferencesModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('preferencesModal')">&times;</span>
+        <h2>Preferences</h2>
+
+        <div class="pref-section">
+            <h4>Theme</h4>
+            <select id="themeSelect" onchange="applyTheme(this.value)">
+                <option value="light">Light</option>
+                <option value="dark">Dark</option>
+                <option value="solarizedLight">Solarized Light</option>
+                <option value="solarizedDark">Solarized Dark</option>
+                <option value="sepia">Sepia</option>
+            </select>
+        </div>
+
+        <div class="pref-section">
+            <h4>Volume</h4>
+            <div class="volume-row">
+                <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="0.5"
+                       oninput="updateVolume(this.value)">
+                <span id="volDisplay" style="font-size: 0.85rem; min-width: 40px; text-align: right;">50%</span>
+            </div>
+        </div>
+
+        <div class="pref-section">
+            <h4>Custom Sounds</h4>
+            <p style="font-size: 0.75rem; color: var(--muted); margin-bottom: 8px;">
+                Upload audio files to replace the default beeps.
+            </p>
+            <div class="sound-row">
+                <label>Normal beep:</label>
+                <input type="file" accept="audio/*" onchange="loadSound(this, 'normal')">
+                <button class="secondary" onclick="testSound('normal')">▶</button>
+                <button class="secondary" onclick="resetSound('normal')">↺</button>
+            </div>
+            <div class="sound-row">
+                <label>Century beep:</label>
+                <input type="file" accept="audio/*" onchange="loadSound(this, 'century')">
+                <button class="secondary" onclick="testSound('century')">▶</button>
+                <button class="secondary" onclick="resetSound('century')">↺</button>
+            </div>
+        </div>
+
+        <div class="pref-section">
+            <h4>Layout</h4>
+            <p style="font-size: 0.75rem; color: var(--muted); margin-bottom: 8px;">
+                Show, hide, and reorder GUI components.
+            </p>
+            <div id="layoutList"></div>
+        </div>
+
+        <button onclick="closeModal('preferencesModal')">Close</button>
+    </div>
+</div>
+
+<div id="keysModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('keysModal')">&times;</span>
+        <h2>Customize Keys</h2>
+        <p style="font-size: 0.78rem; color: var(--muted); margin-bottom: 10px;">
+            Click a field and press a key to assign. Press Backspace to clear.
+            The keybind will appear in the cell label.
+        </p>
+        <div id="keybindList"></div>
+        <button onclick="saveKeybinds()" style="margin-top: 14px;">Save Keybinds</button>
+    </div>
+</div>
+
+<div id="aboutModal" class="modal">
+    <div class="modal-content">
+        <span class="close" onclick="closeModal('aboutModal')">&times;</span>
+        <h2>About HEMCOUNT</h2>
+        <p><strong>HEMCOUNT v1.0 Web</strong></p>
+        <p>A web-based differential cell counter for hematology, inspired by the original HEMCOUNT desktop application.</p>
+        <p>This tool helps calculate differential percentages, M:E ratios, and generate clipboard-ready reports for peripheral blood and bone marrow samples.</p>
+        <button onclick="closeModal('aboutModal')">Close</button>
+    </div>
+</div>
+
+<div class="toast" id="toast">Copied!</div>
+
+<script>
+// ---------- Cell definitions ----------
+const ALL_CELLS = [
+    { key: 'lym',    dispName: 'Lymphocyte',    name: 'lymphocytes',    short: 'Lym',    type: 'lymphoid'  },
+    { key: 'band',   dispName: 'Neutrophil',    name: 'neutrophils',    short: 'Neu',    type: 'myeloid'   },
+    { key: 'eos',    dispName: 'Eosinophil',    name: 'eosinophils',    short: 'Eos',    type: 'myeloid'   },
+    { key: 'baso',   dispName: 'Basophil',      name: 'basophils',      short: 'Baso',   type: 'myeloid'   },
+    { key: 'promy',  dispName: 'Promyelocyte',  name: 'promyelocytes',  short: 'Pro',    type: 'myeloid'   },
+    { key: 'mye',    dispName: 'Myelocyte',     name: 'myelocytes',     short: 'Mye',    type: 'myeloid'   },
+    { key: 'meta',   dispName: 'Metamyelocyte', name: 'metamyelocytes', short: 'Meta',   type: 'myeloid'   },
+    { key: 'mono',   dispName: 'Other cells',   name: 'monocytes',      short: 'Other',  type: 'mono'      },
+    { key: 'plasma', dispName: 'Plasma cell',   name: 'plasma cells',   short: 'Plasma', type: 'other'     },
+    { key: 'nRBC',   dispName: 'Nucleated RBC', name: 'nRBCs',          short: 'nRBC',   type: 'erythroid' },
+    { key: 'blast',  dispName: 'Blast',         name: 'blasts',         short: 'Blast',  type: 'myeloid'   },
+];
+
+const THEMES = {
+    light: {
+        bg: '#f0f0f0', panel: '#ffffff', border: '#cccccc',
+        accent: '#2c7be5', danger: '#e74c3c', text: '#222222', muted: '#666666',
+        titlebar: '#3a3a3a', titlebarText: '#ffffff',
+        menuBg: '#fafafa', inputBg: '#ffffff',
+        toastBg: '#333333', toastText: '#ffffff'
+    },
+    dark: {
+        bg: '#1a1a1a', panel: '#2a2a2a', border: '#404040',
+        accent: '#4a9eff', danger: '#ff6b6b', text: '#e0e0e0', muted: '#999999',
+        titlebar: '#000000', titlebarText: '#f0f0f0',
+        menuBg: '#222222', inputBg: '#1a1a1a',
+        toastBg: '#555555', toastText: '#ffffff'
+    },
+    solarizedLight: {
+        bg: '#fdf6e3', panel: '#eee8d5', border: '#b5ad95',
+        accent: '#268bd2', danger: '#dc322f', text: '#073642', muted: '#657b83',
+        titlebar: '#002b36', titlebarText: '#eee8d5',
+        menuBg: '#f5efdc', inputBg: '#e2dbc0',     // was bright white; now warm tone
+        toastBg: '#002b36', toastText: '#eee8d5'
+    },
+    solarizedDark: {
+        bg: '#002b36', panel: '#073642', border: '#586e75',
+        accent: '#268bd2', danger: '#dc322f', text: '#eee8d5', muted: '#93a1a1',
+        titlebar: '#001f27', titlebarText: '#eee8d5',
+        menuBg: '#073642', inputBg: '#002b36',
+        toastBg: '#001f27', toastText: '#eee8d5'
+    },
+    sepia: {
+        bg: '#f4ecd8', panel: '#fdf6e3', border: '#d3c7a8',
+        accent: '#a67c00', danger: '#b84a3b', text: '#3a3020', muted: '#7a6a4a',
+        titlebar: '#5a4a2a', titlebarText: '#fdf6e3',
+        menuBg: '#ede4c8', inputBg: '#fdf6e3',
+        toastBg: '#5a4a2a', toastText: '#fdf6e3'
+    }
+};
+
+let counts = {};
+let mode = 'peripheral';
+let chart = null;
+let globalVolume = 0.5;
+let audioCtx = null;
+let currentTheme = 'light';
+let customSounds = { normal: null, century: null };
+
+let layoutOrder = ['diff', 'params', 'hist', 'output'];
+let layoutVisible = { diff: true, params: true, hist: true, output: true };
+const SECTION_NAMES = {
+    diff: 'Differential Count',
+    params: 'Cell Counting',
+    hist: 'Histogram',
+    output: 'Output Preview'
+};
+
+let keyMap = {
+    '0': 'lym', '1': 'band', '2': 'eos', '3': 'baso', '4': 'promy',
+    '5': 'mye', '6': 'meta', '7': 'mono', '8': 'plasma', '9': 'nRBC',
+    '+': 'blast'
+};
+
+const SHIFT_MAP = {
+    '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
+    '^': '6', '&': '7', '*': '8', '(': '9', ')': '0'
+};
+
+// ---------- Audio ----------
+function initAudio() {
+    if (!audioCtx) {
+        try {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) { console.warn('Web Audio not supported', e); }
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+}
+
+function playBeep(freq, duration, vol) {
+    if (!audioCtx || vol <= 0) return;
+    try {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+        // Keep at full volume briefly, then fade out for a less clicky sound
+        gain.gain.setValueAtTime(vol, audioCtx.currentTime + duration * 0.6);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+    } catch (e) { console.warn('Audio playback failed', e); }
+}
+
+function playSound(type) {
+    if (globalVolume <= 0) return;
+    if (customSounds[type]) {
+        const audio = new Audio(customSounds[type]);
+        audio.volume = globalVolume;
+        audio.play().catch(e => console.warn('Custom sound playback failed', e));
+    } else {
+        initAudio();
+        if (type === 'normal') playBeep(800, 0.05, globalVolume);
+        else playBeep(1200, 0.35, globalVolume);   // prolonged beep
+    }
+}
+
+document.addEventListener('click', function initOnce() {
+    initAudio();
+    document.removeEventListener('click', initOnce);
+}, { once: true });
+
+// ---------- Themes ----------
+function applyTheme(name) {
+    const t = THEMES[name] || THEMES.light;
+    currentTheme = name;
+    const r = document.documentElement;
+    r.style.setProperty('--bg', t.bg);
+    r.style.setProperty('--panel', t.panel);
+    r.style.setProperty('--border', t.border);
+    r.style.setProperty('--accent', t.accent);
+    r.style.setProperty('--danger', t.danger);
+    r.style.setProperty('--text', t.text);
+    r.style.setProperty('--muted', t.muted);
+    r.style.setProperty('--titlebar', t.titlebar);
+    r.style.setProperty('--titlebar-text', t.titlebarText);
+    r.style.setProperty('--menu-bg', t.menuBg);
+    r.style.setProperty('--input-bg', t.inputBg);
+    r.style.setProperty('--toast-bg', t.toastBg);
+    r.style.setProperty('--toast-text', t.toastText);
+    if (chart) updateHistogram();
+}
+
+// ---------- Core Logic ----------
+function initCounts() {
+    counts = {};
+    ALL_CELLS.forEach(c => counts[c.key] = 0);
+}
+
+function getKeyForCell(cellKey) {
+    for (const [k, v] of Object.entries(keyMap)) {
+        if (v === cellKey) return k;
+    }
+    return '';
+}
+
+function getCellLabel(cell) {
+    const k = getKeyForCell(cell.key);
+    return k ? `${cell.dispName} (${k})` : cell.dispName;
+}
+
+function renderDiffGrid() {
+    const grid = document.getElementById('diffGrid');
+    grid.innerHTML = '';
+    ALL_CELLS.forEach(cell => {
+        const div = document.createElement('div');
+        div.className = 'diff-item';
+        div.innerHTML = `
+            <span class="label">${getCellLabel(cell)}</span>
+            <span class="count" id="cnt-${cell.key}"
+                  contenteditable="true" inputmode="numeric"
+                  title="Click to type a value"
+                  onfocus="this.select()"
+                  onblur="commitCount('${cell.key}', this)"
+                  onkeydown="handleCountKey(event, '${cell.key}', this)">${counts[cell.key] || 0}</span>
+            <span class="pct" id="pct-${cell.key}">0%</span>
+            <span class="btns">
+                <button class="inc" onclick="change('${cell.key}', 1)">▲</button>
+                <button class="dec" onclick="change('${cell.key}', -1)">▼</button>
+            </span>
+        `;
+        grid.appendChild(div);
+    });
+}
+
+function handleCountKey(e, cellKey, el) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        el.blur();
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelEdit(cellKey, el);
+    }
+}
+
+function commitCount(cellKey, el) {
+    const val = Math.max(0, parseInt(el.textContent.trim().replace(/[^0-9-]/g, '')) || 0);
+    counts[cellKey] = val;
+    el.textContent = val;
+    updateAll();
+}
+
+function cancelEdit(cellKey, el) {
+    el.textContent = counts[cellKey] || 0;
+    el.blur();
+}
+
+function getTotal() {
+    let total = 0;
+    ALL_CELLS.forEach(c => {
+        if (mode === 'peripheral' && c.key === 'nRBC') return;
+        total += counts[c.key] || 0;
+    });
+    return total;
+}
+
+function change(key, delta) {
+    if (delta < 0 && counts[key] <= 0) return;
+    counts[key] = (counts[key] || 0) + delta;
+
+    if (delta > 0) {
+        initAudio();
+        const total = getTotal();
+        if (total > 0 && total % 100 === 0) playSound('century');
+        else playSound('normal');
+    }
+    updateAll();
+}
+
+function updateAll() {
+    const total = getTotal();
+
+    ALL_CELLS.forEach(cell => {
+        const cntEl = document.getElementById(`cnt-${cell.key}`);
+        const pctEl = document.getElementById(`pct-${cell.key}`);
+        // Do not overwrite a currently-focused editable count field
+        if (cntEl && document.activeElement !== cntEl) {
+            cntEl.textContent = counts[cell.key] || 0;
+        }
+        if (pctEl) {
+            const pct = total > 0 ? ((counts[cell.key] || 0) / total * 100) : 0;
+            pctEl.textContent = pct.toFixed(1) + '%';
+        }
+    });
+
+    document.getElementById('totalCount').textContent = total;
+
+    const ratioBox = document.getElementById('ratioBox');
+    if (mode === 'bone') {
+        ratioBox.style.display = 'block';
+        let myeloid = 0, erythroid = 0;
+        ALL_CELLS.forEach(c => {
+            if (c.type === 'myeloid') myeloid += counts[c.key] || 0;
+            if (c.type === 'erythroid') erythroid += counts[c.key] || 0;
+        });
+        const ratio = erythroid > 0 ? (myeloid / erythroid).toFixed(2) : '—';
+        document.getElementById('meRatio').textContent = erythroid > 0 ? `${ratio}:1` : '—';
+    } else {
+        ratioBox.style.display = 'none';
+    }
+
+    updateHistogram();
+    updateOutput();
+}
+
+function updateHistogram() {
+    const histSection = document.querySelector('[data-section="hist"]');
+    if (!histSection || histSection.style.display === 'none') return;
+    const canvas = document.getElementById('histChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const t = THEMES[currentTheme] || THEMES.light;
+
+    const labels = ALL_CELLS.map(c => c.short);
+    const data = ALL_CELLS.map(c => counts[c.key] || 0);
+    const colors = ALL_CELLS.map(c => {
+        if (c.type === 'myeloid') return '#2c7be5';
+        if (c.type === 'erythroid') return '#e74c3c';
+        if (c.type === 'lymphoid') return '#27ae60';
+        return '#f39c12';
+    });
+
+    if (chart) chart.destroy();
+    chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                backgroundColor: colors,
+                borderColor: colors,
+                borderWidth: 1,
+                borderRadius: 3,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: (ctx) => `${ctx.raw} cells` } }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { stepSize: 1, font: { size: 9 }, color: t.muted },
+                    grid: { color: t.border }
+                },
+                x: {
+                    ticks: { font: { size: 9 }, maxRotation: 0, color: t.muted },
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+}
+
+// ---------- Output Formatting ----------
+function generateOutput() {
+    const hgb = document.getElementById('hgb').value || '—';
+    const mcv = document.getElementById('mcv').value || '—';
+    const wbc = document.getElementById('wbc').value || '—';
+    const plt = document.getElementById('plt').value || '—';
+
+    const total = getTotal();
+    const isPeripheral = mode === 'peripheral';
+
+    let lines = [];
+    lines.push(`Haemoglobin ${hgb} g/dL, Mean Corpuscular Volume ${mcv} fL, White blood cells ${wbc} x 10^9/L, Platelets ${plt} x 10^9/L`);
+    lines.push('');
+
+    if (total === 0 && counts.nRBC === 0) {
+        lines.push('No differential count recorded.');
+    } else {
+        const mainList = isPeripheral
+            ? ALL_CELLS.filter(c => c.key !== 'nRBC')
+            : ALL_CELLS;
+        const nonZero = mainList.filter(c => counts[c.key] > 0);
+
+        if (nonZero.length > 0) {
+            let diffStr = '';
+            nonZero.forEach((c, i) => {
+                const pct = total > 0 ? ((counts[c.key] / total) * 100).toFixed(0) : 0;
+                if (i === 0) diffStr += `${c.name} ${pct}%`;
+                else if (i === nonZero.length - 1) diffStr += ` and ${c.name} ${pct}%`;
+                else diffStr += `, ${c.name} ${pct}%`;
+            });
+            lines.push(`${total} cell differential count: ${diffStr}`);
+        } else {
+            lines.push(`${total} cell differential count.`);
+        }
+
+        if (isPeripheral && counts.nRBC > 0) {
+            const nRBCPer100 = total > 0 ? ((counts.nRBC / total) * 100).toFixed(0) : 0;
+            lines.push(`nRBCs: ${nRBCPer100} per 100 WBCs`);
+        }
+
+        if (mode === 'bone') {
+            let myeloid = 0, erythroid = 0;
+            ALL_CELLS.forEach(c => {
+                if (c.type === 'myeloid') myeloid += counts[c.key] || 0;
+                if (c.type === 'erythroid') erythroid += counts[c.key] || 0;
+            });
+            if (erythroid > 0) {
+                lines.push(`Myeloid:Erythroid ratio ${ (myeloid/erythroid).toFixed(2) }:1`);
+            }
+        }
+    }
+
+    lines.push('');
+    lines.push(`Total cells counted: ${total}`);
+    return lines.join('\n');
+}
+
+function updateOutput() {
+    document.getElementById('outputBox').textContent = generateOutput();
+}
+
+// ---------- Clipboard & Actions ----------
+function copyOutput() {
+    const text = generateOutput();
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('Copied to clipboard!');
+    }).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast('Copied to clipboard!');
+    });
+}
+
+function showToast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+function resetAll() {
+    initCounts();
+    renderDiffGrid();
+    updateAll();
+}
+
+function resumeCounting() {
+    showToast('Counting resumed');
+    window.focus();
+}
+
+// ---------- Modals ----------
+function openModal(id) {
+    document.getElementById(id).style.display = 'block';
+    if (id === 'keysModal') renderKeybinds();
+    if (id === 'preferencesModal') initPreferences();
+}
+function closeModal(id) {
+    document.getElementById(id).style.display = 'none';
+}
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.style.display = 'none';
+    }
+}
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.modal').forEach(m => m.style.display = 'none');
+    }
+});
+
+// ---------- Preferences ----------
+function initPreferences() {
+    document.getElementById('volumeSlider').value = globalVolume;
+    document.getElementById('volDisplay').textContent = Math.round(globalVolume * 100) + '%';
+    document.getElementById('themeSelect').value = currentTheme;
+    renderLayoutList();
+}
+
+function updateVolume(val) {
+    globalVolume = parseFloat(val);
+    document.getElementById('volDisplay').textContent = Math.round(globalVolume * 100) + '%';
+}
+
+function loadSound(input, type) {
+    const file = input.files && input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        customSounds[type] = e.target.result;
+        showToast(`Custom ${type} sound loaded`);
+    };
+    reader.readAsDataURL(file);
+}
+
+function testSound(type) { playSound(type); }
+
+function resetSound(type) {
+    customSounds[type] = null;
+    showToast(`Reset ${type} sound to default`);
+}
+
+// ---------- Layout Management ----------
+function renderLayoutList() {
+    const container = document.getElementById('layoutList');
+    container.innerHTML = '';
+    layoutOrder.forEach((key, idx) => {
+        const row = document.createElement('div');
+        row.className = 'layout-row';
+        row.innerHTML = `
+            <input type="checkbox" ${layoutVisible[key] ? 'checked' : ''}
+                   onchange="toggleSection('${key}', this.checked)">
+            <span>${SECTION_NAMES[key]}</span>
+            <button ${idx === 0 ? 'disabled' : ''} onclick="moveSection('${key}', -1)" title="Move up">↑</button>
+            <button ${idx === layoutOrder.length - 1 ? 'disabled' : ''} onclick="moveSection('${key}', 1)" title="Move down">↓</button>
+        `;
+        container.appendChild(row);
+    });
+}
+
+function toggleSection(key, visible) {
+    layoutVisible[key] = visible;
+    applyLayout();
+}
+
+function moveSection(key, direction) {
+    const idx = layoutOrder.indexOf(key);
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx >= layoutOrder.length) return;
+    [layoutOrder[idx], layoutOrder[newIdx]] = [layoutOrder[newIdx], layoutOrder[idx]];
+    applyLayout();
+    renderLayoutList();
+}
+
+function applyLayout() {
+    const main = document.getElementById('mainArea');
+    const sections = {};
+    main.querySelectorAll('[data-section]').forEach(el => {
+        sections[el.dataset.section] = el;
+        el.remove();
+    });
+    layoutOrder.forEach(key => {
+        const el = sections[key];
+        if (el) {
+            el.style.display = layoutVisible[key] ? '' : 'none';
+            main.appendChild(el);
+        }
+    });
+    if (layoutVisible.hist) {
+        setTimeout(() => {
+            if (chart) { chart.destroy(); chart = null; }
+            updateHistogram();
+        }, 30);
+    }
+}
+
+// ---------- Keybinds ----------
+function renderKeybinds() {
+    const container = document.getElementById('keybindList');
+    container.innerHTML = '';
+    ALL_CELLS.forEach(cell => {
+        const currentKey = getKeyForCell(cell.key);
+        const row = document.createElement('div');
+        row.className = 'keybind-row';
+        row.innerHTML = `
+            <label>${cell.dispName}</label>
+            <input type="text" maxlength="1" value="${currentKey}" data-cell="${cell.key}"
+                   onkeydown="handleKeyInput(event, this)">
+        `;
+        container.appendChild(row);
+    });
+}
+
+function handleKeyInput(e, input) {
+    if (e.key === 'Tab') return;
+    e.preventDefault();
+    if (e.key === 'Backspace') {
+        input.value = '';
+    } else if (e.key.length === 1) {
+        input.value = e.key;
+    }
+}
+
+function saveKeybinds() {
+    const inputs = document.querySelectorAll('#keybindList input');
+    const newKeyMap = {};
+    let hasError = false;
+
+    inputs.forEach(input => {
+        const key = input.value.trim();
+        const cellKey = input.dataset.cell;
+        if (key) {
+            if (newKeyMap[key]) {
+                alert(`Key '${key}' is already assigned to another cell!`);
+                hasError = true;
+            } else {
+                newKeyMap[key] = cellKey;
+            }
+        }
+    });
+
+    if (!hasError) {
+        keyMap = newKeyMap;
+        renderDiffGrid();
+        closeModal('keysModal');
+        showToast('Keybinds saved');
+    }
+}
+
+// ---------- Keyboard Shortcuts ----------
+document.addEventListener('keydown', (e) => {
+    // Ignore typing inside inputs, selects, or editable fields
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    if (e.target.isContentEditable) return;
+    if (document.querySelector('.modal[style*="display: block"]')) return;
+
+    if (e.key === 'Enter') { copyOutput(); e.preventDefault(); return; }
+
+    // Blast decrement with '-' (counterpart to '+')
+    if (e.key === '-') {
+        const plusCell = keyMap['+'];
+        if (plusCell) {
+            change(plusCell, -1);
+            e.preventDefault();
+            return;
+        }
+    }
+
+    // Direct keybind match (includes '+' for blasts)
+    const directCell = keyMap[e.key];
+    if (directCell) {
+        change(directCell, 1);
+        e.preventDefault();
+        return;
+    }
+
+    // Shift+number decrement (via SHIFT_MAP)
+    if (e.shiftKey && SHIFT_MAP[e.key]) {
+        const baseKey = SHIFT_MAP[e.key];
+        if (keyMap[baseKey]) {
+            change(keyMap[baseKey], -1);
+            e.preventDefault();
+            return;
+        }
+    }
+
+    // Shift+letter decrement (if user bound a lowercase letter)
+    if (e.shiftKey && e.key.length === 1 && e.key >= 'A' && e.key <= 'Z') {
+        const lower = e.key.toLowerCase();
+        if (keyMap[lower] && !keyMap[e.key]) {
+            change(keyMap[lower], -1);
+            e.preventDefault();
+        }
+    }
+});
+
+// ---------- Sample Type ----------
+function changeSampleType(val) {
+    mode = val;
+    document.querySelectorAll('input[name="mode"]').forEach(r => {
+        r.checked = (r.value === val);
+    });
+    updateAll();
+}
+
+// ---------- Initialize ----------
+initCounts();
+renderDiffGrid();
+applyTheme('light');
+updateAll();
+
+['hgb','mcv','wbc','plt'].forEach(id => {
+    document.getElementById(id).addEventListener('input', updateOutput);
+});
+</script>
+</body>
+</html>
