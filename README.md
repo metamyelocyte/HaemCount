@@ -15,8 +15,6 @@ Fast, keyboard-driven differential counting for peripheral blood and bone marrow
 
 </div>
 
----
-
 ## 📖 Table of Contents
 
 - [About](#-about)
@@ -31,8 +29,6 @@ Fast, keyboard-driven differential counting for peripheral blood and bone marrow
 - [License](#-license)
 - [Disclaimer](#-disclaimer)
 
----
-
 ## 🔬 About
 
 **HaemCount** is a from-scratch web reimplementation of the classic **HEMCOUNT v1.0** Windows desktop application. It preserves the core workflow, layout, and feel of the original — a fast, keyboard-driven interface for counting differential leukocytes — while making it accessible in any modern browser.
@@ -40,8 +36,6 @@ Fast, keyboard-driven differential counting for peripheral blood and bone marrow
 The original **HEMCOUNT** was created by **Nelson Chan** ([@nelsonchanhk](https://github.com/nelsonchanhk)):
 
 > 🔗 [https://github.com/nelsonchanhk/HEMCOUNT](https://github.com/nelsonchanhk/HEMCOUNT)
-
----
 
 ## ✨ Features
 
@@ -61,8 +55,6 @@ The original **HEMCOUNT** was created by **Nelson Chan** ([@nelsonchanhk](https:
 | 🖱️ **Click-to-copy** | One click copies the report to the clipboard |
 | 💾 **Backlog** | Save, label, and reload multiple sessions |
 | ⏸️ **Pause-on-blur** | Optional focus guard to prevent accidental keystrokes |
-
----
 
 ## 🚀 Getting Started
 
