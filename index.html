@@ -115,17 +115,14 @@ See the LICENSE file for details.
         flex-shrink: 0;
     }
 
-    /* Parameters grid — spans first two columns */
+    /* Parameters grid — spans the full width now that the "Other" input is gone */
     .params-grid {
-        grid-column: 1 / 3;
+        grid-column: 1 / -1;
         display: grid;
         grid-template-columns: max-content 1fr;
         gap: 3px 8px;
         align-items: center;
         font-size: 11.5px;
-    }
-    @media (max-width: 640px) {
-        .params-grid { grid-column: 1 / -1; }
     }
     .params-grid > label {
         color: var(--text);
@@ -158,27 +155,6 @@ See the LICENSE file for details.
         white-space: nowrap;
     }
 
-    /* "Other" text input — third column, sitting immediately above the Other cell */
-    .other-cell-input {
-        grid-column: 3 / 4;
-        align-self: end;               /* bottom of the params block == directly above the diff-grid */
-        display: flex;
-        align-items: center;
-    }
-    @media (max-width: 640px) {
-        .other-cell-input { grid-column: 1 / -1; }
-    }
-    .other-cell-input input {
-        width: 100%;
-        height: 26px;                  /* matches .diff-cell min-height so columns line up */
-        padding: 2px 6px;
-        border: 1px solid var(--border);
-        border-radius: 3px;
-        background: var(--input-bg);
-        color: var(--text);
-        font-size: 11px;
-    }
-
     /* Differential cells */
     .diff-cell {
         display: flex;
@@ -199,6 +175,24 @@ See the LICENSE file for details.
         text-overflow: ellipsis;
         min-width: 0;
         color: var(--text);
+    }
+    /* Inline-editable "Other" name inside its diff cell */
+    .diff-cell .editable-label {
+        outline: none;
+        padding: 0 1px;
+        border-radius: 2px;
+        border-bottom: 1px dashed transparent;
+        cursor: text;
+        transition: background 0.12s, border-color 0.12s;
+    }
+    .diff-cell .editable-label:hover {
+        border-bottom-color: var(--muted);
+        background: var(--input-bg);
+    }
+    .diff-cell .editable-label:focus {
+        border-bottom-color: var(--accent);
+        background: var(--input-bg);
+        box-shadow: 0 0 0 1px var(--accent);
     }
     .diff-cell .count-wrap {
         display: flex;
@@ -688,6 +682,96 @@ See the LICENSE file for details.
         50%      { opacity: 0.45; }
     }
 
+    /* ---------- About modal ---------- */
+    .about-content {
+        max-width: 470px;
+        padding: 0;
+        overflow: hidden;
+    }
+    .about-header {
+        position: relative;
+        padding: 20px 24px 16px;
+        text-align: center;
+        color: #fff;
+        background: linear-gradient(135deg, var(--titlebar) 0%, var(--accent) 140%);
+    }
+    .about-header .close {
+        top: 8px;
+        right: 12px;
+        font-size: 20px;
+        color: rgba(255, 255, 255, 0.78);
+    }
+    .about-header .close:hover { color: #fff; }
+    .about-header .about-logo {
+        font-size: 28px;
+        line-height: 1;
+        margin-bottom: 8px;
+    }
+    .about-header h2 {
+        display: inline-block;
+        margin: 0;
+        font-size: 20px;
+        font-weight: 700;
+        letter-spacing: 0.6px;
+        color: #fff;
+    }
+    .about-version {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 1px 7px;
+        font-size: 9.5px;
+        font-weight: 600;
+        letter-spacing: 0.4px;
+        vertical-align: middle;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.2);
+    }
+    .about-header .about-tagline {
+        margin: 7px 0 0;
+        font-size: 10px;
+        line-height: 1.45;
+        color: rgba(255, 255, 255, 0.88);
+    }
+    .about-body {
+        padding: 14px 20px 6px;
+        max-height: 58vh;
+        overflow-y: auto;
+    }
+    .about-section { margin-bottom: 13px; }
+    .about-section:last-child { margin-bottom: 4px; }
+    .about-section h4 {
+        margin-bottom: 4px;
+        font-size: 9.5px;
+        font-weight: 700;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        color: var(--accent);
+    }
+    .about-section p {
+        margin-bottom: 5px;
+        font-size: 10.5px;
+        line-height: 1.5;
+        color: var(--text);
+    }
+    .about-section p:last-child { margin-bottom: 0; }
+    .about-section a { color: var(--accent); text-decoration: none; }
+    .about-section a:hover { text-decoration: underline; }
+    .about-disclaimer {
+        padding: 9px 11px;
+        border-left: 3px solid var(--danger);
+        border-radius: 0 4px 4px 0;
+        background: rgba(128, 128, 128, 0.12);
+    }
+    .about-disclaimer h4 { color: var(--danger); }
+    .about-footer {
+        display: flex;
+        justify-content: flex-end;
+        padding: 10px 20px 14px;
+        border-top: 1px solid var(--border);
+        background: var(--menu-bg);
+    }
+
     ::-webkit-scrollbar { width: 8px; height: 8px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
@@ -711,7 +795,7 @@ See the LICENSE file for details.
     </div>
 
     <div class="main" id="mainArea">
-        <!-- Top: parameters (cols 1-2), "other" input (col 3 — directly above the Other cell) -->
+        <!-- Top: parameters (full width now that the floating Other box is gone) -->
         <div class="top-section" data-section="params">
             <div class="params-grid">
                 <label for="hgb">Haemoglobin</label>
@@ -738,15 +822,10 @@ See the LICENSE file for details.
                     <span class="unit">×10⁹/L</span>
                 </div>
             </div>
-            <div class="other-cell-input">
-                <input type="text" id="otherLabel" placeholder="other" value="other"
-                       oninput="updateOtherLabel(this.value)"
-                       title="Label for the 'Other' category">
-            </div>
         </div>
 
-        <!-- Differential grid -->
-        <div class="diff-grid" id="diffGrid"></div>
+        <!-- Differential grid (12 cells + mode selector) -->
+        <div class="diff-grid" id="diffGrid" data-section="diff"></div>
 
         <!-- Histogram -->
         <div class="hist-panel" data-section="hist">
@@ -873,23 +952,44 @@ See the LICENSE file for details.
 
 <!-- About -->
 <div id="aboutModal" class="modal">
-    <div class="modal-content">
-        <span class="close" onclick="closeModal('aboutModal')">&times;</span>
-        <h2>About HaemCount</h2>
-        <p><strong>HaemCount v1.0</strong> — a web reimplementation of the HEMCOUNT differential cell counter.</p>
-        <p><strong>Author:</strong> Tiffany Lau (2026)</p>
-        <p>Inspired by the original <strong>HEMCOUNT</strong> by Nelson Chan
-           (<a href="https://github.com/nelsonchanhk/HEMCOUNT" target="_blank" rel="noopener">@nelsonchanhk</a>).</p>
-        <p><strong>License:</strong> GNU General Public License v3.0 (GPLv3). This program comes with
-           <strong>ABSOLUTELY NO WARRANTY</strong>. You are welcome to redistribute it under certain
-           conditions. See the LICENSE file for details.</p>
-        <hr style="margin: 8px 0; border: 0; border-top: 1px solid var(--border);">
-        <h4 style="font-size: 10px; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px;">Disclaimer</h4>
-        <p style="font-size: 9.5px;">This is an independent, unofficial reimplementation.</p>
-        <p style="font-size: 9.5px;"><strong>For educational and research support only. Not a medical device.</strong>
-           Must not be used as the sole basis for clinical diagnosis or patient management. All clinical
-           decisions must be made by qualified healthcare professionals using validated laboratory systems.</p>
-        <button onclick="closeModal('aboutModal')" style="margin-top: 8px;">Close</button>
+    <div class="modal-content about-content">
+        <div class="about-header">
+            <span class="close" onclick="closeModal('aboutModal')">&times;</span>
+            <div class="about-logo">🩸</div>
+            <h2>HaemCount</h2><span class="about-version">v1.0</span>
+            <p class="about-tagline">A web reimplementation of the HEMCOUNT differential cell counter</p>
+        </div>
+
+        <div class="about-body">
+            <div class="about-section">
+                <h4>Copyright</h4>
+                <p>© 2026 Tiffany Lau. All rights reserved.</p>
+            </div>
+
+            <div class="about-section">
+                <h4>Credits</h4>
+                <p>Inspired by the original <strong>HEMCOUNT</strong> by Nelson Chan
+                   (<a href="https://github.com/nelsonchanhk/HEMCOUNT" target="_blank" rel="noopener">@nelsonchanhk</a>).</p>
+            </div>
+
+            <div class="about-section">
+                <h4>License</h4>
+                <p>GNU General Public License v3.0 (GPLv3).</p>
+                <p>This program comes with <strong>ABSOLUTELY NO WARRANTY</strong>. You are welcome to
+                   redistribute it under certain conditions. See the LICENSE file for details.</p>
+            </div>
+
+            <div class="about-section about-disclaimer">
+                <h4>Disclaimer</h4>
+                <p>For educational and research support only. <strong>Not a medical device.</strong></p>
+                <p>Must not be used as the sole basis for clinical diagnosis or patient management. All clinical
+                   decisions must be made by qualified healthcare professionals using validated laboratory systems.</p>
+            </div>
+        </div>
+
+        <div class="about-footer">
+            <button onclick="closeModal('aboutModal')">Close</button>
+        </div>
     </div>
 </div>
 
@@ -1123,8 +1223,6 @@ function loadBacklogEntry(id) {
     // Apply mode & other label
     mode = (entry.mode === 'bone') ? 'bone' : 'peripheral';
     otherLabelValue = entry.otherLabel || 'other';
-    const otherInput = document.getElementById('otherLabel');
-    if (otherInput) otherInput.value = otherLabelValue;
 
     // Apply parameters
     const p = entry.params || {};
@@ -1135,7 +1233,7 @@ function loadBacklogEntry(id) {
         }
     });
 
-    // Re-render (renderDiffGrid uses current `mode` for radio checked state)
+    // Re-render (renderDiffGrid uses current `mode` and `otherLabelValue`)
     renderDiffGrid();
     updateAll();
     closeModal('backlogModal');
@@ -1311,6 +1409,21 @@ document.addEventListener('visibilitychange', () => {
     if (document.hidden) pauseCounting();
 });
 
+// ---------- Unsaved-work guard (reload / close / navigate away) ----------
+let bypassUnloadWarning = false;
+
+function hasCountedCells() {
+    return ALL_CELLS.some(c => (counts[c.key] || 0) > 0);
+}
+
+window.addEventListener('beforeunload', (e) => {
+    if (bypassUnloadWarning) return;
+    if (!hasCountedCells()) return;
+    e.preventDefault();
+    e.returnValue = '';   // required by Chrome/Edge to show the native prompt
+    return '';
+});
+
 // ---------- Themes ----------
 function applyTheme(name) {
     const t = THEMES[name] || THEMES.light;
@@ -1346,14 +1459,32 @@ function getKeyForCell(cellKey) {
     return '';
 }
 
-function getCellLabel(cell) {
-    const k = getKeyForCell(cell.key);
-    const dispName = (cell.key === 'other') ? capitalize(otherLabelValue || 'other') : cell.dispName;
-    return k ? `${dispName} (${k})` : dispName;
-}
-
 function capitalize(s) {
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
+function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+}
+
+// Renders the inner HTML of a cell's label.
+// The "Other" cell gets an inline contenteditable name span so users can rename
+// the category directly from the grid (no floating input box).
+function getCellLabelHTML(cell) {
+    const k = getKeyForCell(cell.key);
+    const keySuffix = k ? ` (${escapeHtml(k)})` : '';
+    if (cell.key === 'other') {
+        const name = capitalize(otherLabelValue || 'other');
+        return `<span class="editable-label" contenteditable="true" spellcheck="false"` +
+               ` title="Click to rename this category"` +
+               ` onfocus="this.select()"` +
+               ` onkeydown="handleOtherLabelKey(event, this)"` +
+               ` onblur="commitOtherLabel(this)">${escapeHtml(name)}</span>` +
+               keySuffix;
+    }
+    return escapeHtml(cell.dispName) + keySuffix;
 }
 
 function renderDiffGrid() {
@@ -1363,7 +1494,7 @@ function renderDiffGrid() {
         const div = document.createElement('div');
         div.className = 'diff-cell';
         div.innerHTML = `
-            <span class="cell-label" title="${cell.dispName}">${getCellLabel(cell)}</span>
+            <span class="cell-label" title="${escapeHtml(cell.dispName)}">${getCellLabelHTML(cell)}</span>
             <div class="count-wrap">
                 <span class="count-box"
                       contenteditable="true"
@@ -1408,6 +1539,28 @@ function commitCount(cellKey, el) {
     counts[cellKey] = val;
     el.textContent = val;
     updateAll();
+}
+
+// ---------- Inline-editable "Other" label ----------
+function handleOtherLabelKey(e, el) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        el.blur();
+    } else if (e.key === 'Escape') {
+        e.preventDefault();
+        el.textContent = capitalize(otherLabelValue || 'other');
+        el.blur();
+    }
+}
+
+function commitOtherLabel(el) {
+    let val = (el.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!val) val = 'other';
+    if (val.length > 32) val = val.slice(0, 32);   // keep the cell tidy
+    otherLabelValue = val;
+    el.textContent = capitalize(val);
+    // Don't rebuild the grid — just refresh anything derived from the label.
+    updateOutput();
 }
 
 function getTotal() {
@@ -1584,12 +1737,6 @@ function updateOutput() {
     document.getElementById('outputBox').textContent = generateOutput();
 }
 
-function updateOtherLabel(val) {
-    otherLabelValue = val || 'other';
-    renderDiffGrid();
-    updateAll();
-}
-
 // ---------- Clipboard ----------
 function copyOutput() {
     const text = generateOutput();
@@ -1627,8 +1774,6 @@ function resetAll() {
 
     // 2. "Other" label back to its default
     otherLabelValue = 'other';
-    const otherInput = document.getElementById('otherLabel');
-    if (otherInput) otherInput.value = 'other';
 
     // 3. Keep whatever theme the user is currently on
     applyTheme(currentTheme);
@@ -1756,7 +1901,7 @@ function renderKeybinds() {
         row.className = 'keybind-row';
         row.innerHTML = `
             <label>${cell.dispName}</label>
-            <input type="text" maxlength="1" value="${currentKey}" data-cell="${cell.key}"
+            <input type="text" maxlength="1" value="${escapeHtml(currentKey)}" data-cell="${cell.key}"
                    onkeydown="handleKeyInput(event, this)">
         `;
         container.appendChild(row);
