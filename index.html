@@ -256,6 +256,92 @@ See the LICENSE file for details.
             opacity: 1;
         }
 
+        /* ---------- First-visit hint for the editable "Other" label ---------- */
+        .diff-cell .editable-label.hint-target {
+            background: var(--input-bg);
+            border-bottom-color: var(--accent);
+            border-radius: 3px;
+            animation: hintPulse 1.4s ease-in-out infinite;
+        }
+
+        @keyframes hintPulse {
+
+            0%,
+            100% {
+                outline: 2px solid transparent;
+                outline-offset: 1px;
+            }
+
+            50% {
+                outline: 2px solid var(--accent);
+                outline-offset: 3px;
+            }
+        }
+
+        .hint-bubble {
+            position: fixed;
+            z-index: 1200;
+            /* below modals (1000+) and pause overlay (1500) */
+            width: max-content;
+            max-width: 215px;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: flex-start;
+            background: var(--toast-bg);
+            color: var(--toast-text);
+            border-radius: 6px;
+            font-size: 10.5px;
+            line-height: 1.4;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
+            animation: hintIn 0.22s ease-out;
+        }
+
+        @keyframes hintIn {
+            from {
+                opacity: 0;
+                transform: translateY(4px) scale(0.97);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .hint-bubble .hint-arrow {
+            position: absolute;
+            left: var(--arrow-x, 50%);
+            bottom: -4px;
+            width: 9px;
+            height: 9px;
+            margin-left: -4.5px;
+            background: var(--toast-bg);
+            transform: rotate(45deg);
+        }
+
+        .hint-bubble.below .hint-arrow {
+            bottom: auto;
+            top: -4px;
+        }
+
+        .hint-bubble .hint-btn {
+            align-self: flex-end;
+            padding: 2px 9px;
+            font-size: 9.5px;
+            font-weight: 600;
+            border: none;
+            border-radius: 3px;
+            background: var(--accent);
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .hint-bubble .hint-btn:hover {
+            filter: brightness(1.1);
+        }
+
         .diff-cell .count-wrap {
             display: flex;
             align-items: stretch;
@@ -1679,6 +1765,106 @@ See the LICENSE file for details.
             return '';
         });
 
+        // ---------- First-visit hint: the "Other" label is editable ----------
+        const HINT_KEY = 'haemcount.otherHintSeen.v1';
+
+        let hintEl = null;
+        let hintTarget = null;
+        let hintTimer = null;
+
+        function otherHintSeen() {
+            try { return localStorage.getItem(HINT_KEY) === '1'; }
+            catch (e) { return false; }
+        }
+
+        function markOtherHintSeen() {
+            try { localStorage.setItem(HINT_KEY, '1'); } catch (e) { }
+        }
+
+        function maybeShowOtherHint() {
+            if (otherHintSeen()) return;
+            if (!layoutVisible.diff) return;                 // nothing to point at
+            const target = document.querySelector('.diff-cell .editable-label');
+            if (!target || !target.isConnected) return;
+            showOtherHint(target);
+        }
+
+        function showOtherHint(target) {
+            hideOtherHint(false);
+
+            hintTarget = target;
+            target.classList.add('hint-target');
+
+            hintEl = document.createElement('div');
+            hintEl.className = 'hint-bubble';
+            hintEl.innerHTML =
+                '<div>Tip: this name is editable — click to rename it.</div>' +
+                '<button type="button" class="hint-btn">Got it</button>' +
+                '<span class="hint-arrow"></span>';
+            document.body.appendChild(hintEl);
+
+            hintEl.querySelector('.hint-btn')
+                .addEventListener('click', () => hideOtherHint(true));
+
+            positionOtherHint();
+
+            // Give up if it's ignored
+            hintTimer = setTimeout(() => hideOtherHint(true), 12000);
+
+            window.addEventListener('resize', positionOtherHint);
+            window.addEventListener('scroll', positionOtherHint, true);
+            document.addEventListener('click', onHintOutsideClick, true);
+            document.addEventListener('keydown', onHintKey, true);
+        }
+
+        function positionOtherHint() {
+            if (!hintEl || !hintTarget || !hintTarget.isConnected) return;
+
+            const r = hintTarget.getBoundingClientRect();
+            const b = hintEl.getBoundingClientRect();
+            const gap = 12;
+
+            let top = r.top - b.height - gap;
+            const below = top < 6;
+            if (below) top = r.bottom + gap;
+
+            let left = r.left + r.width / 2 - b.width / 2;
+            left = Math.max(8, Math.min(left, window.innerWidth - b.width - 8));
+
+            hintEl.style.top = top + 'px';
+            hintEl.style.left = left + 'px';
+            hintEl.classList.toggle('below', below);
+
+            // Keep the arrow aimed at the label, not the bubble centre
+            const arrowX = r.left + r.width / 2 - left;
+            hintEl.style.setProperty('--arrow-x', arrowX + 'px');
+        }
+
+        function hideOtherHint(remember) {
+            if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
+
+            window.removeEventListener('resize', positionOtherHint);
+            window.removeEventListener('scroll', positionOtherHint, true);
+            document.removeEventListener('click', onHintOutsideClick, true);
+            document.removeEventListener('keydown', onHintKey, true);
+
+            if (hintTarget) hintTarget.classList.remove('hint-target');
+            hintTarget = null;
+
+            if (hintEl) { hintEl.remove(); hintEl = null; }
+
+            if (remember) markOtherHintSeen();
+        }
+
+        function onHintOutsideClick(e) {
+            if (hintEl && hintEl.contains(e.target)) return;   // let the "Got it" button work
+            hideOtherHint(true);
+        }
+
+        function onHintKey(e) {
+            if (e.key === 'Escape' || e.key === 'Enter') hideOtherHint(true);
+        }
+
         // ---------- Themes ----------
         function applyTheme(name) {
             const t = THEMES[name] || THEMES.light;
@@ -1743,6 +1929,7 @@ See the LICENSE file for details.
         }
 
         function renderDiffGrid() {
+            if (hintEl) hideOtherHint(true);
             const grid = document.getElementById('diffGrid');
             grid.innerHTML = '';
             ALL_CELLS.forEach(cell => {
@@ -2243,6 +2430,9 @@ See the LICENSE file for details.
         ['hgb', 'mcv', 'wbc', 'plt'].forEach(id => {
             document.getElementById(id).addEventListener('input', updateOutput);
         });
+
+        // Show the "this is editable" tip once, after layout has settled
+        setTimeout(maybeShowOtherHint, 450);
     </script>
 </body>
 
