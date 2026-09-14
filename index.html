@@ -5,15 +5,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>HaemCount</title>
-   <link rel="manifest" href="/manifest.json">
-<link rel="icon" type="image/png" href="/icons/icon-192.png">
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" href="/icons/icon-192.png">
     <!--
 HaemCount — a web reimplementation of the HEMCOUNT differential cell counter
 Copyright (C) 2026  Tiffany Lau
 Licensed under the GNU General Public License v3.0 (GPLv3).
 See the LICENSE file for details.
 -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- Chart.js is self-hosted so the app no longer depends on a third-party CDN.
+         This is required for reliable offline use (see /sw.js). -->
+    <script src="/js/chart.umd.min.js"></script>
     <style>
         :root {
             --bg: #ebebeb;
@@ -2998,6 +3000,18 @@ See the LICENSE file for details.
 
         // Show the "this is editable" tip once, after layout has settled
         setTimeout(maybeShowOtherHint, 450);
+
+        // ---------- Service worker (offline support) ----------
+        // Registers /sw.js, which precaches the app shell and static assets so
+        // the app can start and run without a network connection after the
+        // first successful online visit.
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js').catch(err => {
+                    console.warn('Service worker registration failed', err);
+                });
+            });
+        }
     </script>
 </body>
 
