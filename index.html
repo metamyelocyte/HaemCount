@@ -758,6 +758,16 @@ See the LICENSE file for details.
             outline: 2px solid var(--accent);
         }
 
+        /* Group heading inside the Customize Keys modal */
+        .keybind-heading {
+            margin: 12px 0 4px;
+            font-size: 9.5px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: var(--text);
+        }
+
         /* ---------- Backlog ---------- */
         .backlog-save-row {
             display: flex;
@@ -1358,6 +1368,7 @@ See the LICENSE file for details.
                     <option value="solarizedLight">Solarized Light</option>
                     <option value="solarizedDark">Solarized Dark</option>
                     <option value="sepia">Sepia</option>
+                    <option value="pink">Pink</option>
                 </select>
             </div>
             <div class="pref-section">
@@ -1365,6 +1376,10 @@ See the LICENSE file for details.
                 <label class="pref-check">
                     <input type="checkbox" id="pauseOnBlurCheck" onchange="setPauseOnBlur(this.checked)">
                     Show pause overlay when this window loses focus
+                </label>
+                <label class="pref-check" style="margin-top: 6px;">
+                    <input type="checkbox" id="warnOnResetCheck" onchange="setWarnOnReset(this.checked)">
+                    Warn before resetting counts or leaving with unsaved counts
                 </label>
             </div>
             <div class="pref-section">
@@ -1413,8 +1428,13 @@ See the LICENSE file for details.
         <div class="modal-content">
             <span class="close" onclick="closeModal('keysModal')">&times;</span>
             <h2>Customize Keys</h2>
-            <p>Click a field and press a key to assign. Press Backspace to clear.</p>
+            <p>Click a field and press a key to assign. Press Backspace to clear. Leave an action blank to disable it.
+            </p>
             <div id="keybindList"></div>
+
+            <div class="keybind-heading">Actions</div>
+            <div id="actionKeybindList"></div>
+
             <button onclick="saveKeybinds()" style="margin-top: 10px;">Save Keybinds</button>
         </div>
     </div>
@@ -1565,6 +1585,13 @@ See the LICENSE file for details.
                 titlebar: '#5a4a2a', titlebarText: '#fdf6e3',
                 menuBg: '#ede4c8', inputBg: '#fdf6e3',
                 toastBg: '#5a4a2a', toastText: '#fdf6e3'
+            },
+            pink: {
+                bg: '#fdeef4', panel: '#ffffff', border: '#f2b8d0',
+                accent: '#e0559a', danger: '#d6336c', text: '#3d1f2c', muted: '#9a6b80',
+                titlebar: '#8e2a56', titlebarText: '#ffe8f2',
+                menuBg: '#fce3ee', inputBg: '#ffffff',
+                toastBg: '#8e2a56', toastText: '#ffe8f2'
             }
         };
 
@@ -1597,6 +1624,21 @@ See the LICENSE file for details.
         };
         let keyMap = Object.assign({}, DEFAULT_KEY_MAP);
 
+        // ---------- Action keybinds ----------
+        // These are not tied to a cell. `reset` is blank by default so it can
+        // never fire by accident; `toggleMode` keeps the historic "-" binding.
+        const DEFAULT_ACTION_KEYS = { toggleMode: '-', reset: '' };
+        let actionKeys = Object.assign({}, DEFAULT_ACTION_KEYS);
+
+        const ACTION_DEFS = [
+            { key: 'toggleMode', label: 'Switch sample type (bone / peripheral)' },
+            { key: 'reset', label: 'Reset all counts' }
+        ];
+
+        // When false, the reset confirmation and the "unsaved counts" prompt
+        // shown on reload / close are skipped.
+        let warnBeforeReset = true;
+
         // ---------- Preferences storage (persists across reloads) ----------
         const PREFS_KEY = 'haemcount.prefs.v1';
 
@@ -1606,6 +1648,8 @@ See the LICENSE file for details.
                     volume: globalVolume,
                     theme: currentTheme,
                     keybinds: keyMap,
+                    actionKeys: actionKeys,
+                    warnBeforeReset: warnBeforeReset,
                     pauseOnBlur: pauseOnBlur,
                     chartType: chartType
                 }));
@@ -1644,6 +1688,18 @@ See the LICENSE file for details.
                 });
                 keyMap = cleaned;
             }
+
+            // Action keybinds (validated; anything unexpected falls back to defaults)
+            actionKeys = Object.assign({}, DEFAULT_ACTION_KEYS);
+            if (prefs.actionKeys && typeof prefs.actionKeys === 'object') {
+                Object.keys(DEFAULT_ACTION_KEYS).forEach(k => {
+                    const val = prefs.actionKeys[k];
+                    if (typeof val === 'string' && (val === '' || val.length === 1)) actionKeys[k] = val;
+                });
+            }
+
+            // Reset / unload warning — on unless explicitly turned off
+            warnBeforeReset = prefs.warnBeforeReset !== false;
 
             // Pause-on-blur
             pauseOnBlur = !!prefs.pauseOnBlur;
@@ -2081,6 +2137,7 @@ See the LICENSE file for details.
 
         window.addEventListener('beforeunload', (e) => {
             if (bypassUnloadWarning) return;
+            if (!warnBeforeReset) return;
             if (!hasCountedCells()) return;
             e.preventDefault();
             e.returnValue = '';   // required by Chrome/Edge to show the native prompt
@@ -2640,6 +2697,8 @@ See the LICENSE file for details.
 
         // ---------- Reset with confirmation ----------
         function confirmReset() {
+            // Skip the prompt entirely when the user has turned warnings off.
+            if (!warnBeforeReset) { resetAll(); return; }
             if (withNativeDialog(() => confirm(
                 'Reset all counts and restore the "Other" label?\n\nThis cannot be undone.'
             ))) {
@@ -2683,6 +2742,7 @@ See the LICENSE file for details.
             document.getElementById('volDisplay').textContent = Math.round(globalVolume * 100) + '%';
             document.getElementById('themeSelect').value = currentTheme;
             document.getElementById('pauseOnBlurCheck').checked = pauseOnBlur;
+            document.getElementById('warnOnResetCheck').checked = warnBeforeReset;
             document.getElementById('chartTypeSelect').value = chartType;
             SOUND_TYPES.forEach(updateSoundStatus);
             renderLayoutList();
@@ -2691,6 +2751,11 @@ See the LICENSE file for details.
         function setPauseOnBlur(enabled) {
             pauseOnBlur = !!enabled;
             if (!pauseOnBlur && paused) resumeCounting();
+            savePrefs();
+        }
+
+        function setWarnOnReset(enabled) {
+            warnBeforeReset = !!enabled;
             savePrefs();
         }
 
@@ -2775,6 +2840,23 @@ See the LICENSE file for details.
         `;
                 container.appendChild(row);
             });
+            renderActionKeybinds();
+        }
+
+        function renderActionKeybinds() {
+            const container = document.getElementById('actionKeybindList');
+            if (!container) return;
+            container.innerHTML = '';
+            ACTION_DEFS.forEach(def => {
+                const row = document.createElement('div');
+                row.className = 'keybind-row';
+                row.innerHTML = `
+            <label>${escapeHtml(def.label)}</label>
+            <input type="text" maxlength="1" value="${escapeHtml(actionKeys[def.key] || '')}" data-action="${def.key}"
+                   onkeydown="handleKeyInput(event, this)">
+        `;
+                container.appendChild(row);
+            });
         }
 
         function handleKeyInput(e, input) {
@@ -2785,23 +2867,46 @@ See the LICENSE file for details.
         }
 
         function saveKeybinds() {
-            const inputs = document.querySelectorAll('#keybindList input');
+            const cellInputs = document.querySelectorAll('#keybindList input');
+            const actionInputs = document.querySelectorAll('#actionKeybindList input');
             const newKeyMap = {};
+            const newActionKeys = { toggleMode: '', reset: '' };
+            const usedBy = {};
             let hasError = false;
-            inputs.forEach(input => {
-                const key = input.value.trim();
-                const cellKey = input.dataset.cell;
-                if (key) {
-                    if (newKeyMap[key]) {
-                        withNativeDialog(() => alert(`Key '${key}' is already assigned to another cell!`));
-                        hasError = true;
-                    } else {
-                        newKeyMap[key] = cellKey;
-                    }
+
+            function claim(key, owner) {
+                if (usedBy[key]) {
+                    withNativeDialog(() => alert(`Key '${key}' is already assigned to ${usedBy[key]}.`));
+                    hasError = true;
+                    return false;
                 }
+                usedBy[key] = owner;
+                return true;
+            }
+
+            // Cell keys
+            cellInputs.forEach(input => {
+                const key = input.value.trim();
+                if (!key) return;
+                const cellKey = input.dataset.cell;
+                const cell = ALL_CELLS.find(c => c.key === cellKey);
+                const owner = cell ? `the ${cell.dispName} cell` : `cell '${cellKey}'`;
+                if (claim(key, owner)) newKeyMap[key] = cellKey;
             });
+
+            // Action keys
+            actionInputs.forEach(input => {
+                const key = input.value.trim();
+                if (!key) return;
+                const actionKey = input.dataset.action;
+                const def = ACTION_DEFS.find(d => d.key === actionKey);
+                const owner = def ? `the "${def.label}" action` : `action '${actionKey}'`;
+                if (claim(key, owner)) newActionKeys[actionKey] = key;
+            });
+
             if (!hasError) {
                 keyMap = newKeyMap;
+                actionKeys = newActionKeys;
                 savePrefs();
                 renderDiffGrid();
                 closeModal('keysModal');
@@ -2818,13 +2923,21 @@ See the LICENSE file for details.
 
             if (e.key === 'Enter') { copyOutput(); e.preventDefault(); return; }
 
-            if (e.key === '-') {
-                const plusCell = keyMap['+'];
-                if (plusCell) { change(plusCell, -1); e.preventDefault(); return; }
-            }
-
+            // Cell keybinds take priority so a cell can never be shadowed by an action
             const directCell = keyMap[e.key];
             if (directCell) { change(directCell, 1); e.preventDefault(); return; }
+
+            // Action keybinds (switch sample type / reset)
+            for (const def of ACTION_DEFS) {
+                const k = actionKeys[def.key];
+                if (k && e.key === k) { e.preventDefault(); runKeyAction(def.key); return; }
+            }
+
+            // Legacy behaviour kept as a fallback: "-" decrements the cell bound
+            // to "+", but only while "-" is not assigned to an action.
+            if (e.key === '-' && keyMap['+']) {
+                change(keyMap['+'], -1); e.preventDefault(); return;
+            }
 
             if (e.shiftKey && SHIFT_MAP[e.key]) {
                 const baseKey = SHIFT_MAP[e.key];
@@ -2840,6 +2953,17 @@ See the LICENSE file for details.
             }
         });
 
+        // ---------- Action keybinds ----------
+        function runKeyAction(actionKey) {
+            if (actionKey === 'toggleMode') {
+                const next = (mode === 'bone') ? 'peripheral' : 'bone';
+                changeSampleType(next);
+                showToast(next === 'bone' ? 'Bone marrow mode' : 'Peripheral blood mode');
+            } else if (actionKey === 'reset') {
+                confirmReset();
+            }
+        }
+
         // ---------- Sample type ----------
         function changeSampleType(val) {
             if (mode === val) return;
@@ -2852,7 +2976,7 @@ See the LICENSE file for details.
 
         // ---------- Initialize ----------
         initCounts();
-        loadPrefs();                       // restore volume, theme, keybinds, chart type (+ pause-on-blur) before rendering
+        loadPrefs();                       // restore volume, theme, keybinds, action keys, warnings, chart type
         renderDiffGrid();
         applyTheme(currentTheme);
         updateAll();
