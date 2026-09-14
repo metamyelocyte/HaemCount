@@ -441,6 +441,15 @@ See the LICENSE file for details.
             overflow: hidden;
         }
 
+        /* Pie mode needs more vertical room than the compact bar histogram */
+        .hist-panel.chart-pie {
+            min-height: 150px;
+        }
+
+        .hist-panel.chart-pie .hist-container {
+            min-height: 118px;
+        }
+
         /* Output panel */
         .output-panel {
             border: 1px solid var(--border);
@@ -1146,6 +1155,14 @@ See the LICENSE file for details.
                 min-height: 40px;
             }
 
+            .hist-panel.chart-pie {
+                min-height: 120px;
+            }
+
+            .hist-panel.chart-pie .hist-container {
+                min-height: 96px;
+            }
+
             .output-panel {
                 min-height: 52px;
             }
@@ -1174,6 +1191,14 @@ See the LICENSE file for details.
 
             .hist-container {
                 min-height: 32px;
+            }
+
+            .hist-panel.chart-pie {
+                min-height: 96px;
+            }
+
+            .hist-panel.chart-pie .hist-container {
+                min-height: 76px;
             }
 
             .output-panel {
@@ -1343,6 +1368,13 @@ See the LICENSE file for details.
                 </label>
             </div>
             <div class="pref-section">
+                <h4>Histogram</h4>
+                <select id="chartTypeSelect" onchange="setChartType(this.value)">
+                    <option value="bar">Bar chart</option>
+                    <option value="pie">Pie chart</option>
+                </select>
+            </div>
+            <div class="pref-section">
                 <h4>Volume</h4>
                 <div class="volume-row">
                     <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="0.5"
@@ -1437,11 +1469,14 @@ See the LICENSE file for details.
 
     <script>
         // ---------- Cell definitions ----------
+        // Myeloid lineage: eos, baso, band (neutrophil), mono, promy, mye, meta, blast
+        // Erythroid lineage: nRBC
+        // Everything else (lym, plasma, other) is "other".
         const ALL_CELLS = [
             { key: 'eos', dispName: 'Eosinophil', name: 'eosinophils', short: 'Eos', type: 'myeloid' },
             { key: 'baso', dispName: 'Basophil', name: 'basophils', short: 'Baso', type: 'myeloid' },
             { key: 'other', dispName: 'Other', name: 'other cells', short: 'Other', type: 'other' },
-            { key: 'mono', dispName: 'Monocyte', name: 'monocytes', short: 'Mono', type: 'mono' },
+            { key: 'mono', dispName: 'Monocyte', name: 'monocytes', short: 'Mono', type: 'myeloid' },
             { key: 'band', dispName: 'Neutrophil', name: 'neutrophils', short: 'Neu', type: 'myeloid' },
             { key: 'lym', dispName: 'Lymphocyte', name: 'lymphocytes', short: 'Lym', type: 'lymphoid' },
             { key: 'plasma', dispName: 'Plasma cell', name: 'plasma cells', short: 'Plasma', type: 'other' },
@@ -1452,7 +1487,48 @@ See the LICENSE file for details.
             { key: 'nRBC', dispName: 'Nucleated RBC', name: 'nRBCs', short: 'nRBC', type: 'erythroid' },
         ];
 
+        // Bar-chart order: the original maturation sequence, left to right.
         const HIST_ORDER = ['blast', 'promy', 'mye', 'meta', 'band', 'lym', 'mono', 'other', 'eos', 'baso', 'plasma', 'nRBC'];
+
+        // Pie-chart order: the myeloid lineages are grouped together as one block,
+        // immediately followed by the erythroid lineage. The remaining (non-myeloid,
+        // non-erythroid) categories follow afterwards.
+        const PIE_ORDER = [
+            // Myeloid lineage — granulocytic maturation series
+            'blast', 'promy', 'mye', 'meta', 'band',
+            // Myeloid lineage — other mature forms
+            'mono', 'eos', 'baso',
+            // Erythroid lineage — adjacent to the myeloid block
+            'nRBC',
+            // Other lineages
+            'lym', 'plasma', 'other'
+        ];
+
+        // Pie slice colours by lineage:
+        //   myeloid  → varying shades of blue (dark = immature, light = mature)
+        //   erythroid→ red
+        //   others   → green / orange / purple
+        const CELL_COLORS = {
+            // Myeloid — blue family
+            blast: '#08306b',
+            promy: '#10529e',
+            mye: '#1c74c9',
+            meta: '#4696e0',
+            band: '#84bdf0',
+            eos: '#00a6c8',
+            baso: '#5a63d0',
+            mono: '#2c7f9e',
+
+            // Erythroid — red
+            nRBC: '#d62828',
+
+            // Others — distinct non-blue, non-red hues
+            lym: '#43a047',
+            other: '#f4a261',
+            plasma: '#9b59b6'
+        };
+
+        const FALLBACK_PIE_COLOR = '#8a8a8a';
 
         const THEMES = {
             light: {
@@ -1498,6 +1574,7 @@ See the LICENSE file for details.
         let globalVolume = 0.5;
         let audioCtx = null;
         let currentTheme = 'light';
+        let chartType = 'bar';   // 'bar' (default) or 'pie'
         // Each entry is { url, name } or null. `url` is a blob: URL (preferred)
         // or a data: URL (localStorage fallback).
         let customSounds = { normal: null, century: null };
@@ -1529,7 +1606,8 @@ See the LICENSE file for details.
                     volume: globalVolume,
                     theme: currentTheme,
                     keybinds: keyMap,
-                    pauseOnBlur: pauseOnBlur
+                    pauseOnBlur: pauseOnBlur,
+                    chartType: chartType
                 }));
             } catch (e) {
                 console.warn('Could not save preferences', e);
@@ -1569,6 +1647,9 @@ See the LICENSE file for details.
 
             // Pause-on-blur
             pauseOnBlur = !!prefs.pauseOnBlur;
+
+            // Chart type (bar is the default)
+            chartType = (prefs.chartType === 'pie') ? 'pie' : 'bar';
         }
 
         const SHIFT_MAP = {
@@ -2151,6 +2232,29 @@ See the LICENSE file for details.
             }[c]));
         }
 
+        // ---------- Mode-aware naming ----------
+        // In bone marrow mode, nucleated RBCs are reported as the erythroid lineage.
+        function isBoneMarrow() { return mode === 'bone'; }
+
+        function getCellDisplayName(cell) {
+            if (cell.key === 'nRBC' && isBoneMarrow()) return 'Erythroid';
+            return cell.dispName;
+        }
+
+        function getCellShortName(cell) {
+            if (cell.key === 'nRBC' && isBoneMarrow()) return 'Erythroid';
+            return cell.short;
+        }
+
+        function getCellPluralName(cell) {
+            if (cell.key === 'nRBC' && isBoneMarrow()) return 'erythroid cells';
+            return cell.name;
+        }
+
+        function getCellColor(cell) {
+            return CELL_COLORS[cell.key] || FALLBACK_PIE_COLOR;
+        }
+
         // Renders the inner HTML of a cell's label.
         // The "Other" cell gets an inline contenteditable name span so users can rename
         // the category directly from the grid (no floating input box).
@@ -2166,7 +2270,7 @@ See the LICENSE file for details.
                     ` onblur="commitOtherLabel(this)">${escapeHtml(name)}</span>` +
                     keySuffix;
             }
-            return escapeHtml(cell.dispName) + keySuffix;
+            return escapeHtml(getCellDisplayName(cell)) + keySuffix;
         }
 
         function renderDiffGrid() {
@@ -2177,7 +2281,7 @@ See the LICENSE file for details.
                 const div = document.createElement('div');
                 div.className = 'diff-cell';
                 div.innerHTML = `
-            <span class="cell-label" title="${escapeHtml(cell.dispName)}">${getCellLabelHTML(cell)}</span>
+            <span class="cell-label" title="${escapeHtml(getCellDisplayName(cell))}">${getCellLabelHTML(cell)}</span>
             <div class="count-wrap">
                 <span class="count-box"
                       contenteditable="true"
@@ -2303,18 +2407,100 @@ See the LICENSE file for details.
 
         function updateHistogram() {
             const histSection = document.querySelector('[data-section="hist"]');
+            if (histSection) histSection.classList.toggle('chart-pie', chartType === 'pie');
             if (!histSection || histSection.style.display === 'none') return;
             const canvas = document.getElementById('histChart');
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
             const t = THEMES[currentTheme] || THEMES.light;
 
+            if (chart) chart.destroy();
+
+            // ---------- Pie chart ----------
+            if (chartType === 'pie') {
+                // Pie slices are ordered so the myeloid lineages sit together as
+                // one block, immediately followed by the erythroid lineage.
+                const pieCells = PIE_ORDER.map(k => ALL_CELLS.find(c => c.key === k));
+                // Only categories that actually have cells get a slice.
+                const items = pieCells
+                    .map(c => ({ cell: c, value: counts[c.key] || 0, color: getCellColor(c) }))
+                    .filter(it => it.value > 0);
+
+                if (items.length === 0) {
+                    // Nothing counted yet — draw a flat grey disc instead of an empty panel.
+                    chart = new Chart(ctx, {
+                        type: 'pie',
+                        data: {
+                            labels: ['No cells counted'],
+                            datasets: [{ data: [1], backgroundColor: [t.border], borderWidth: 0 }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: false,
+                            plugins: { legend: { display: false }, tooltip: { enabled: false } }
+                        }
+                    });
+                    return;
+                }
+
+                chart = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: items.map(it => getCellShortName(it.cell)),
+                        datasets: [{
+                            data: items.map(it => it.value),
+                            backgroundColor: items.map(it => it.color),
+                            borderColor: t.panel,
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'right',
+                                labels: {
+                                    font: { size: 8 },
+                                    color: t.text,
+                                    boxWidth: 8,
+                                    boxHeight: 8,
+                                    padding: 3
+                                }
+                            },
+                            tooltip: {
+                                titleFont: { size: 10 },
+                                bodyFont: { size: 10 },
+                                callbacks: {
+                                    // Title = full form of the cell name (e.g. "Promyelocyte")
+                                    title: (tooltipItems) => {
+                                        if (!tooltipItems || tooltipItems.length === 0) return '';
+                                        const item = items[tooltipItems[0].dataIndex];
+                                        return item ? getCellDisplayName(item.cell) : '';
+                                    },
+                                    // Body = count and percentage
+                                    label: (c) => {
+                                        const sum = c.dataset.data.reduce((a, b) => a + b, 0);
+                                        const pct = sum > 0 ? (c.raw / sum * 100).toFixed(1) : '0';
+                                        return `${c.raw} cells (${pct}%)`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                return;
+            }
+
+            // ---------- Bar chart (default) ----------
             const histCells = HIST_ORDER.map(k => ALL_CELLS.find(c => c.key === k));
-            const labels = histCells.map(c => c.short);
+            const labels = histCells.map(c => getCellShortName(c));
             const data = histCells.map(c => counts[c.key] || 0);
             const greyBars = histCells.map(() => '#a8a8a8');
 
-            if (chart) chart.destroy();
             chart = new Chart(ctx, {
                 type: 'bar',
                 data: {
@@ -2337,7 +2523,15 @@ See the LICENSE file for details.
                         tooltip: {
                             titleFont: { size: 10 },
                             bodyFont: { size: 10 },
-                            callbacks: { label: (ctx) => `${ctx.raw} cells` }
+                            callbacks: {
+                                // Title = full form of the cell name (e.g. "Promyelocyte")
+                                title: (tooltipItems) => {
+                                    if (!tooltipItems || tooltipItems.length === 0) return '';
+                                    const cell = histCells[tooltipItems[0].dataIndex];
+                                    return cell ? getCellDisplayName(cell) : '';
+                                },
+                                label: (ctx) => `${ctx.raw} cells`
+                            }
                         }
                     },
                     scales: {
@@ -2385,7 +2579,9 @@ See the LICENSE file for details.
                     let diffStr = '';
                     nonZero.forEach((c, i) => {
                         const pct = total > 0 ? ((counts[c.key] / total) * 100).toFixed(0) : 0;
-                        const dispName = (c.key === 'other') ? (otherLabelValue || 'other') + 's' : c.name;
+                        const dispName = (c.key === 'other')
+                            ? (otherLabelValue || 'other') + 's'
+                            : getCellPluralName(c);
                         if (i === 0) diffStr += `${dispName} ${pct}%`;
                         else if (i === nonZero.length - 1) diffStr += ` and ${dispName} ${pct}%`;
                         else diffStr += `, ${dispName} ${pct}%`;
@@ -2487,6 +2683,7 @@ See the LICENSE file for details.
             document.getElementById('volDisplay').textContent = Math.round(globalVolume * 100) + '%';
             document.getElementById('themeSelect').value = currentTheme;
             document.getElementById('pauseOnBlurCheck').checked = pauseOnBlur;
+            document.getElementById('chartTypeSelect').value = chartType;
             SOUND_TYPES.forEach(updateSoundStatus);
             renderLayoutList();
         }
@@ -2495,6 +2692,12 @@ See the LICENSE file for details.
             pauseOnBlur = !!enabled;
             if (!pauseOnBlur && paused) resumeCounting();
             savePrefs();
+        }
+
+        function setChartType(val) {
+            chartType = (val === 'pie') ? 'pie' : 'bar';
+            savePrefs();
+            updateHistogram();
         }
 
         function updateVolume(val) {
@@ -2639,14 +2842,17 @@ See the LICENSE file for details.
 
         // ---------- Sample type ----------
         function changeSampleType(val) {
+            if (mode === val) return;
             mode = val;
-            document.querySelectorAll('input[name="mode"]').forEach(r => { r.checked = (r.value === val); });
+            // The grid label for nucleated RBC changes ("Erythroid" in bone marrow
+            // mode), so the grid has to be rebuilt rather than just refreshed.
+            renderDiffGrid();
             updateAll();
         }
 
         // ---------- Initialize ----------
         initCounts();
-        loadPrefs();                       // restore volume, theme, keybinds (+ pause-on-blur) before rendering
+        loadPrefs();                       // restore volume, theme, keybinds, chart type (+ pause-on-blur) before rendering
         renderDiffGrid();
         applyTheme(currentTheme);
         updateAll();
