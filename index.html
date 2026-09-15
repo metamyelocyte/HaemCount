@@ -1999,10 +1999,6 @@ See the LICENSE file for details.
                 <div class="sound-status" id="soundStatus-century">Default beep</div>
             </div>
             <div class="pref-section">
-                <h4>Tips</h4>
-                <button class="secondary" onclick="resetHints()">Show tips again</button>
-            </div>
-            <div class="pref-section">
                 <h4>Layout</h4>
                 <div id="layoutList"></div>
             </div>
@@ -2222,12 +2218,143 @@ See the LICENSE file for details.
 
         let warnBeforeReset = true;
 
+        // ---------- Unified persistent storage ----------
+        // Browsers in managed environments sometimes block localStorage entirely
+        // (hospital desktops often do). We try localStorage first because it is
+        // synchronous; if it is unavailable we transparently fall back to
+        // IndexedDB (loaded into memory at startup) so preferences, the backlog
+        // and the "Other" hint keep working across sessions. If neither works
+        // we degrade to in-memory (session-only) storage without crashing.
+        const STORAGE_DB_NAME = 'haemcount.kv';
+        const STORAGE_DB_VERSION = 1;
+        const STORAGE_STORE = 'kv';
+
+        const appStorage = (function () {
+            let mode = 'memory';
+            const cache = Object.create(null);
+            let dbPromise = null;
+
+            function testLocalStorage() {
+                try {
+                    const k = '__haemcount_probe__';
+                    localStorage.setItem(k, '1');
+                    localStorage.removeItem(k);
+                    return true;
+                } catch (e) {
+                    return false;
+                }
+            }
+
+            function openDB() {
+                if (dbPromise) return dbPromise;
+                dbPromise = new Promise((resolve, reject) => {
+                    if (!window.indexedDB) { reject(new Error('IndexedDB unavailable')); return; }
+                    const req = indexedDB.open(STORAGE_DB_NAME, STORAGE_DB_VERSION);
+                    req.onupgradeneeded = () => {
+                        const db = req.result;
+                        if (!db.objectStoreNames.contains(STORAGE_STORE)) {
+                            db.createObjectStore(STORAGE_STORE);
+                        }
+                    };
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error || new Error('IndexedDB open failed'));
+                });
+                return dbPromise;
+            }
+
+            function idbReadAll() {
+                return openDB().then(db => new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORAGE_STORE, 'readonly');
+                    const store = tx.objectStore(STORAGE_STORE);
+                    const req = store.openCursor();
+                    const out = Object.create(null);
+                    req.onsuccess = () => {
+                        const cur = req.result;
+                        if (cur) { out[cur.key] = cur.value; cur.continue(); }
+                        else resolve(out);
+                    };
+                    req.onerror = () => reject(req.error);
+                }));
+            }
+
+            function idbWrite(key, value) {
+                return openDB().then(db => new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORAGE_STORE, 'readwrite');
+                    tx.objectStore(STORAGE_STORE).put(value, key);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                    tx.onabort = () => reject(tx.error);
+                }));
+            }
+
+            function idbDelete(key) {
+                return openDB().then(db => new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORAGE_STORE, 'readwrite');
+                    tx.objectStore(STORAGE_STORE).delete(key);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                    tx.onabort = () => reject(tx.error);
+                }));
+            }
+
+            async function init() {
+                if (testLocalStorage()) {
+                    mode = 'local';
+                    return mode;
+                }
+                try {
+                    const all = await idbReadAll();
+                    Object.keys(all).forEach(k => { cache[k] = all[k]; });
+                    mode = 'idb';
+                    return mode;
+                } catch (e) {
+                    console.warn('Persistent storage unavailable; using in-memory fallback', e);
+                    mode = 'memory';
+                    return mode;
+                }
+            }
+
+            function getItem(key) {
+                if (mode === 'local') {
+                    try { return localStorage.getItem(key); } catch (e) { return null; }
+                }
+                return Object.prototype.hasOwnProperty.call(cache, key) ? cache[key] : null;
+            }
+
+            function setItem(key, value) {
+                value = String(value);
+                if (mode === 'local') {
+                    try { localStorage.setItem(key, value); } catch (e) { /* quota etc. */ }
+                    return;
+                }
+                cache[key] = value;
+                if (mode === 'idb') idbWrite(key, value).catch(() => { });
+            }
+
+            function removeItem(key) {
+                if (mode === 'local') {
+                    try { localStorage.removeItem(key); } catch (e) { }
+                    return;
+                }
+                delete cache[key];
+                if (mode === 'idb') idbDelete(key).catch(() => { });
+            }
+
+            return {
+                init: init,
+                getItem: getItem,
+                setItem: setItem,
+                removeItem: removeItem,
+                get mode() { return mode; }
+            };
+        })();
+
         // ---------- Preferences ----------
         const PREFS_KEY = 'haemcount.prefs.v1';
 
         function savePrefs() {
             try {
-                localStorage.setItem(PREFS_KEY, JSON.stringify({
+                appStorage.setItem(PREFS_KEY, JSON.stringify({
                     volume: globalVolume,
                     theme: currentTheme,
                     keybinds: keyMap,
@@ -2246,7 +2373,7 @@ See the LICENSE file for details.
         function loadPrefs() {
             let prefs = null;
             try {
-                const raw = localStorage.getItem(PREFS_KEY);
+                const raw = appStorage.getItem(PREFS_KEY);
                 prefs = raw ? JSON.parse(raw) : null;
             } catch (e) {
                 console.warn('Could not read preferences', e);
@@ -2339,7 +2466,7 @@ See the LICENSE file for details.
 
         function readBacklog() {
             try {
-                const raw = localStorage.getItem(BACKLOG_KEY);
+                const raw = appStorage.getItem(BACKLOG_KEY);
                 if (!raw) return [];
                 const arr = JSON.parse(raw);
                 return Array.isArray(arr) ? arr : [];
@@ -2351,7 +2478,7 @@ See the LICENSE file for details.
 
         function writeBacklog(arr) {
             try {
-                localStorage.setItem(BACKLOG_KEY, JSON.stringify(arr));
+                appStorage.setItem(BACKLOG_KEY, JSON.stringify(arr));
                 return true;
             } catch (e) {
                 console.warn('Could not write backlog', e);
@@ -2661,6 +2788,9 @@ See the LICENSE file for details.
         });
 
         // ---------- Custom sound persistence ----------
+        // Sound blobs go into their own IndexedDB store (efficient for large
+        // files). If that fails, we fall back to appStorage (which may itself
+        // be localStorage, appStorage's IndexedDB, or in-memory).
         const SOUND_DB_NAME = 'haemcount.sounds';
         const SOUND_STORE = 'sounds';
         const SOUND_LS_PREFIX = 'haemcount.sound.';
@@ -2706,18 +2836,18 @@ See the LICENSE file for details.
         async function persistSound(type, file) {
             try {
                 await soundStore('readwrite', store => store.put(file, type));
-                try { localStorage.removeItem(SOUND_LS_PREFIX + type); } catch (e) { }
+                appStorage.removeItem(SOUND_LS_PREFIX + type);
                 return;
             } catch (e) {
-                console.warn('IndexedDB unavailable for sounds, using localStorage', e);
+                console.warn('IndexedDB unavailable for sounds, using fallback storage', e);
             }
             const dataUrl = await readFileAsDataURL(file);
-            localStorage.setItem(SOUND_LS_PREFIX + type, dataUrl);
+            appStorage.setItem(SOUND_LS_PREFIX + type, dataUrl);
         }
 
         async function dropSound(type) {
             try { await soundStore('readwrite', store => store.delete(type)); } catch (e) { }
-            try { localStorage.removeItem(SOUND_LS_PREFIX + type); } catch (e) { }
+            appStorage.removeItem(SOUND_LS_PREFIX + type);
         }
 
         function setCustomSound(type, url, name) {
@@ -2759,7 +2889,7 @@ See the LICENSE file for details.
 
                 if (!url) {
                     try {
-                        const dataUrl = localStorage.getItem(SOUND_LS_PREFIX + type);
+                        const dataUrl = appStorage.getItem(SOUND_LS_PREFIX + type);
                         if (dataUrl) { url = dataUrl; name = 'Custom sound'; }
                     } catch (e) { }
                 }
@@ -2873,17 +3003,12 @@ See the LICENSE file for details.
         let hintTimer = null;
 
         function otherHintSeen() {
-            try { return localStorage.getItem(HINT_KEY) === '1'; }
+            try { return appStorage.getItem(HINT_KEY) === '1'; }
             catch (e) { return false; }
         }
 
         function markOtherHintSeen() {
-            try { localStorage.setItem(HINT_KEY, '1'); } catch (e) { }
-        }
-
-        function resetHints() {
-            try { localStorage.removeItem(HINT_KEY); } catch (e) { }
-            showToast('Tips will show again on next launch');
+            try { appStorage.setItem(HINT_KEY, '1'); } catch (e) { }
         }
 
         function maybeShowOtherHint() {
@@ -3906,7 +4031,7 @@ See the LICENSE file for details.
         window.addEventListener('orientationchange', () => scheduleAutoLayoutCheck(250));
 
         // ---------- Update handling (user-initiated only) ----------
-        // The app is designed to be used as an offline desktop app: it should
+        // The app is designed to be used as an offline desktop app: it does
         // NOT check for or apply updates on its own. Updates only happen when
         // the user clicks "Check for update" in the About dialog.
         //
@@ -4013,6 +4138,11 @@ See the LICENSE file for details.
         }
 
         // ---------- Service worker (offline support, manual updates only) ----------
+        // Once the SW is installed, all requests are served from the cache, so
+        // the app runs fully offline. The only network activity in the app is
+        // the user-triggered update check in the About dialog. (Browsers may
+        // still passively check /sw.js on navigation — that is a browser
+        // behaviour we cannot disable and it fails silently when offline.)
         let swRegistration = null;
 
         async function setupServiceWorker() {
@@ -4126,39 +4256,50 @@ See the LICENSE file for details.
         }
 
         // ---------- Initialize ----------
-        initCounts();
-        loadPrefs();
+        (async function bootstrap() {
+            // Pick the best available persistent backend before anything reads
+            // or writes preferences/backlog.
+            await appStorage.init();
+            console.info('HaemCount storage backend:', appStorage.mode);
 
-        // Restore state that was preserved across an update reload.
-        const pendingUpdateState = loadUpdateSnapshot();
-        const restoredFromUpdate = restoreAppState(pendingUpdateState);
+            initCounts();
+            loadPrefs();
 
-        applyLayoutMode(true);   // apply view mode before first render
-        renderDiffGrid();
-        applyTheme(currentTheme);
-        updateAll();
-        restoreSounds();
+            // Restore state that was preserved across an update reload.
+            const pendingUpdateState = loadUpdateSnapshot();
+            const restoredFromUpdate = restoreAppState(pendingUpdateState);
 
-        requestAnimationFrame(() => requestAnimationFrame(() => {
-            if (chart) { chart.destroy(); chart = null; }
-            updateHistogram();
-        }));
+            applyLayoutMode(true);   // apply view mode before first render
+            renderDiffGrid();
+            applyTheme(currentTheme);
+            updateAll();
+            restoreSounds();
 
-        ['hgb', 'mcv', 'wbc', 'plt'].forEach(id => {
-            document.getElementById(id).addEventListener('input', updateOutput);
-        });
+            requestAnimationFrame(() => requestAnimationFrame(() => {
+                if (chart) { chart.destroy(); chart = null; }
+                updateHistogram();
+            }));
 
-        setTimeout(maybeShowOtherHint, 450);
+            ['hgb', 'mcv', 'wbc', 'plt'].forEach(id => {
+                document.getElementById(id).addEventListener('input', updateOutput);
+            });
 
-        // If we just updated, let the user know their counts carried over.
-        if (restoredFromUpdate && consumePendingUpdateToast()) {
-            setTimeout(() => showToast('App updated — your counts were preserved'), 700);
-        }
+            setTimeout(maybeShowOtherHint, 450);
 
-        // ---------- Service worker init ----------
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', setupServiceWorker);
-        }
+            // If we just updated, let the user know their counts carried over.
+            if (restoredFromUpdate && consumePendingUpdateToast()) {
+                setTimeout(() => showToast('App updated — your counts were preserved'), 700);
+            }
+
+            // ---------- Service worker init ----------
+            if ('serviceWorker' in navigator) {
+                if (document.readyState === 'complete') {
+                    setupServiceWorker();
+                } else {
+                    window.addEventListener('load', setupServiceWorker);
+                }
+            }
+        })();
     </script>
 </body>
 
