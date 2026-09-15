@@ -13,1816 +13,714 @@ Copyright (C) 2026  Tiffany Lau
 Licensed under the GNU General Public License v3.0 (GPLv3).
 See the LICENSE file for details.
 -->
-    <!-- Chart.js is self-hosted so the app no longer depends on a third-party CDN.
-         This is required for reliable offline use (see /sw.js). -->
     <script src="/js/chart.umd.min.js"></script>
     <style>
         :root {
-            --bg: #ebebeb;
-            --panel: #ffffff;
-            --border: #c0c0c0;
-            --accent: #2c7be5;
-            --danger: #e74c3c;
-            --text: #1e1e1e;
-            --muted: #6b6b6b;
-            --titlebar: #3a3a3a;
-            --titlebar-text: #ffffff;
-            --menu-bg: #f5f5f5;
-            --input-bg: #ffffff;
-            --toast-bg: #2b2b2b;
-            --toast-text: #ffffff;
+            --bg: #ebebeb; --panel: #ffffff; --border: #c0c0c0; --accent: #2c7be5;
+            --danger: #e74c3c; --text: #1e1e1e; --muted: #6b6b6b; --titlebar: #3a3a3a;
+            --titlebar-text: #ffffff; --menu-bg: #f5f5f5; --input-bg: #ffffff;
+            --toast-bg: #2b2b2b; --toast-text: #ffffff;
+            --ok: #2e8b57; --warnbg: #fff4e0; --warnborder: #f0c78a; --warnfg: #7a4b00;
         }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-        }
-
-        html,
-        body {
-            height: 100%;
-            width: 100%;
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body {
+            height: 100%; width: 100%;
             font-family: 'Segoe UI', Tahoma, system-ui, -apple-system, sans-serif;
-            font-size: 12px;
-            background: var(--bg);
-            color: var(--text);
-            overflow: hidden;
+            font-size: 12px; background: var(--bg); color: var(--text); overflow: hidden;
         }
-
         .app {
-            width: 100vw;
-            height: 100vh;
-            height: 100dvh;
-            background: var(--bg);
-            display: flex;
-            flex-direction: column;
-            overflow-x: hidden;
-            overflow-y: auto;
+            width: 100vw; height: 100vh; height: 100dvh; background: var(--bg);
+            display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto;
             transition: filter 0.2s ease, opacity 0.2s ease;
         }
-
-        /* Title bar */
         .titlebar {
-            background: var(--titlebar);
-            color: var(--titlebar-text);
-            padding: 4px 10px;
-            font-weight: 600;
-            font-size: 11.5px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-shrink: 0;
+            background: var(--titlebar); color: var(--titlebar-text);
+            padding: 4px 10px; font-weight: 600; font-size: 11.5px;
+            display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
         }
-
-        .titlebar .close {
-            cursor: pointer;
-            opacity: 0.65;
-            font-size: 13px;
-            line-height: 1;
-            padding: 0 2px;
-        }
-
-        .titlebar .close:hover {
-            opacity: 1;
-        }
-
-        /* Menu bar */
+        .titlebar .close { cursor: pointer; opacity: 0.65; font-size: 13px; line-height: 1; padding: 0 2px; }
+        .titlebar .close:hover { opacity: 1; }
         .menu {
-            display: flex;
-            gap: 18px;
-            padding: 4px 12px;
-            background: var(--menu-bg);
-            border-bottom: 1px solid var(--border);
-            font-size: 11.5px;
-            color: var(--text);
-            align-items: center;
-            flex-shrink: 0;
-            flex-wrap: wrap;
+            display: flex; gap: 18px; padding: 4px 12px; background: var(--menu-bg);
+            border-bottom: 1px solid var(--border); font-size: 11.5px; color: var(--text);
+            align-items: center; flex-shrink: 0; flex-wrap: wrap;
         }
-
-        .menu span {
-            cursor: pointer;
-            user-select: none;
-            white-space: nowrap;
-        }
-
-        .menu span:hover {
-            color: var(--accent);
-        }
-
-        /* Main content */
+        .menu span { cursor: pointer; user-select: none; white-space: nowrap; }
+        .menu span:hover { color: var(--accent); }
+        .menu span.session-highlight { color: var(--danger); font-weight: 700; }
         .main {
-            flex: 1 1 auto;
-            display: flex;
-            flex-direction: column;
-            padding: 6px 8px;
-            gap: 5px;
-            overflow: visible;
-            min-height: min-content;
+            flex: 1 1 auto; display: flex; flex-direction: column;
+            padding: 6px 8px; gap: 5px; overflow: visible; min-height: min-content;
         }
-
-        .top-section,
-        .diff-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 4px;
+        .top-section, .diff-grid {
+            display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px;
         }
-
-        .top-section {
-            flex-shrink: 0;
-        }
-
+        .top-section { flex-shrink: 0; }
         .params-grid {
-            grid-column: 1 / -1;
-            display: grid;
+            grid-column: 1 / -1; display: grid;
             grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
-            gap: 3px 8px;
-            align-items: center;
-            font-size: 11.5px;
+            gap: 3px 8px; align-items: center; font-size: 11.5px;
         }
-
         .params-grid>label {
-            color: var(--text);
-            white-space: nowrap;
-            cursor: pointer;
-            min-width: 0;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            color: var(--text); white-space: nowrap; cursor: pointer;
+            min-width: 0; overflow: hidden; text-overflow: ellipsis;
         }
-
         .param-field {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            min-width: 0;
-            justify-self: start;
+            display: flex; align-items: center; gap: 4px; min-width: 0; justify-self: start;
         }
-
         .param-field input[type="number"] {
-            width: 92px;
-            max-width: 100%;
-            flex: 0 1 92px;
-            padding: 2px 6px;
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            background: var(--input-bg);
-            color: var(--text);
-            font-size: 11px;
-            text-align: right;
-            height: 20px;
+            width: 92px; max-width: 100%; flex: 0 1 92px; padding: 2px 6px;
+            border: 1px solid var(--border); border-radius: 3px; background: var(--input-bg);
+            color: var(--text); font-size: 11px; text-align: right; height: 20px;
         }
-
-        .param-field .unit {
-            font-size: 10px;
-            color: var(--text);
-            white-space: nowrap;
-        }
-
+        .param-field .unit { font-size: 10px; color: var(--text); white-space: nowrap; }
         .diff-cell {
-            display: flex;
-            align-items: center;
-            gap: 3px;
-            padding: 3px 5px;
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            background: var(--menu-bg);
-            min-height: 26px;
-            overflow: hidden;
-            min-width: 0;
+            display: flex; align-items: center; gap: 3px; padding: 3px 5px;
+            border: 1px solid var(--border); border-radius: 3px; background: var(--menu-bg);
+            min-height: 26px; overflow: hidden; min-width: 0;
         }
-
         .diff-cell .cell-label {
-            flex: 1 1 auto;
-            font-size: 10px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            min-width: 0;
-            color: var(--text);
+            flex: 1 1 auto; font-size: 10px; white-space: nowrap; overflow: hidden;
+            text-overflow: ellipsis; min-width: 0; color: var(--text);
         }
-
         .diff-cell .editable-label {
-            outline: none;
-            padding: 0 1px;
-            border-radius: 2px;
-            border-bottom: 1px dashed var(--muted);
-            cursor: text;
+            outline: none; padding: 0 1px; border-radius: 2px;
+            border-bottom: 1px dashed var(--muted); cursor: text;
             transition: background 0.12s, border-color 0.12s;
         }
-
-        .diff-cell .editable-label:hover {
-            border-bottom-color: var(--accent);
-            background: var(--input-bg);
-        }
-
+        .diff-cell .editable-label:hover { border-bottom-color: var(--accent); background: var(--input-bg); }
         .diff-cell .editable-label:focus {
-            border-bottom-color: var(--accent);
-            background: var(--input-bg);
+            border-bottom-color: var(--accent); background: var(--input-bg);
             box-shadow: 0 0 0 1px var(--accent);
         }
-
         .diff-cell .editable-label.hint-target {
-            background: var(--input-bg);
-            border-bottom-color: var(--accent);
-            border-radius: 3px;
-            animation: hintPulse 1.4s ease-in-out infinite;
+            background: var(--input-bg); border-bottom-color: var(--accent);
+            border-radius: 3px; animation: hintPulse 1.4s ease-in-out infinite;
         }
-
         @keyframes hintPulse {
-
-            0%,
-            100% {
-                outline: 2px solid transparent;
-                outline-offset: 1px;
-            }
-
-            50% {
-                outline: 2px solid var(--accent);
-                outline-offset: 3px;
-            }
+            0%, 100% { outline: 2px solid transparent; outline-offset: 1px; }
+            50% { outline: 2px solid var(--accent); outline-offset: 3px; }
         }
-
         .hint-bubble {
-            position: fixed;
-            z-index: 1200;
-            width: max-content;
-            max-width: 215px;
-            padding: 8px 10px;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-            align-items: flex-start;
-            background: var(--toast-bg);
-            color: var(--toast-text);
-            border-radius: 6px;
-            font-size: 10.5px;
-            line-height: 1.4;
-            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
-            animation: hintIn 0.22s ease-out;
+            position: fixed; z-index: 1200; width: max-content; max-width: 215px;
+            padding: 8px 10px; display: flex; flex-direction: column; gap: 6px;
+            align-items: flex-start; background: var(--toast-bg); color: var(--toast-text);
+            border-radius: 6px; font-size: 10.5px; line-height: 1.4;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32); animation: hintIn 0.22s ease-out;
         }
-
         @keyframes hintIn {
-            from {
-                opacity: 0;
-                transform: translateY(4px) scale(0.97);
-            }
-
-            to {
-                opacity: 1;
-                transform: translateY(0) scale(1);
-            }
+            from { opacity: 0; transform: translateY(4px) scale(0.97); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
         }
-
         .hint-bubble .hint-arrow {
-            position: absolute;
-            left: var(--arrow-x, 50%);
-            bottom: -4px;
-            width: 9px;
-            height: 9px;
-            margin-left: -4.5px;
-            background: var(--toast-bg);
+            position: absolute; left: var(--arrow-x, 50%); bottom: -4px;
+            width: 9px; height: 9px; margin-left: -4.5px; background: var(--toast-bg);
             transform: rotate(45deg);
         }
-
-        .hint-bubble.below .hint-arrow {
-            bottom: auto;
-            top: -4px;
-        }
-
+        .hint-bubble.below .hint-arrow { bottom: auto; top: -4px; }
         .hint-bubble .hint-btn {
-            align-self: flex-end;
-            padding: 2px 9px;
-            font-size: 9.5px;
-            font-weight: 600;
-            border: none;
-            border-radius: 3px;
-            background: var(--accent);
-            color: #fff;
-            cursor: pointer;
+            align-self: flex-end; padding: 2px 9px; font-size: 9.5px; font-weight: 600;
+            border: none; border-radius: 3px; background: var(--accent); color: #fff; cursor: pointer;
         }
-
-        .hint-bubble .hint-btn:hover {
-            filter: brightness(1.1);
-        }
-
-        .diff-cell .count-wrap {
-            display: flex;
-            align-items: stretch;
-            flex-shrink: 0;
-        }
-
+        .hint-bubble .hint-btn:hover { filter: brightness(1.1); }
+        .diff-cell .count-wrap { display: flex; align-items: stretch; flex-shrink: 0; }
         .diff-cell .count-box {
-            width: 30px;
-            padding: 1px 3px;
-            border: 1px solid var(--border);
-            border-right: none;
-            border-radius: 3px 0 0 3px;
-            background: var(--input-bg);
-            color: var(--text);
-            font-size: 10.5px;
-            font-weight: 700;
-            text-align: center;
-            outline: none;
-            cursor: text;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 20px;
+            width: 30px; padding: 1px 3px; border: 1px solid var(--border);
+            border-right: none; border-radius: 3px 0 0 3px; background: var(--input-bg);
+            color: var(--text); font-size: 10.5px; font-weight: 700; text-align: center;
+            outline: none; cursor: text; display: flex; align-items: center;
+            justify-content: center; min-height: 20px;
         }
-
-        .diff-cell .count-box:focus {
-            outline: 1.5px solid var(--accent);
-            outline-offset: -1.5px;
-        }
-
+        .diff-cell .count-box:focus { outline: 1.5px solid var(--accent); outline-offset: -1.5px; }
         .diff-cell .spinner {
-            display: flex;
-            flex-direction: column;
-            border: 1px solid var(--border);
-            border-radius: 0 3px 3px 0;
-            background: var(--panel);
-            overflow: hidden;
-            flex-shrink: 0;
+            display: flex; flex-direction: column; border: 1px solid var(--border);
+            border-radius: 0 3px 3px 0; background: var(--panel); overflow: hidden; flex-shrink: 0;
         }
-
         .diff-cell .spinner button {
-            width: 16px;
-            height: 10px;
-            border: none;
-            background: var(--panel);
-            color: var(--text);
-            cursor: pointer;
-            font-size: 6.5px;
-            line-height: 1;
-            padding: 0;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+            width: 16px; height: 10px; border: none; background: var(--panel);
+            color: var(--text); cursor: pointer; font-size: 6.5px; line-height: 1;
+            padding: 0; display: flex; align-items: center; justify-content: center;
             touch-action: manipulation;
         }
-
-        .diff-cell .spinner button:hover {
-            background: var(--border);
-        }
-
-        .diff-cell .spinner button.up {
-            border-bottom: 1px solid var(--border);
-        }
-
+        .diff-cell .spinner button:hover { background: var(--border); }
+        .diff-cell .spinner button.up { border-bottom: 1px solid var(--border); }
         .diff-cell .pct {
-            font-size: 9.5px;
-            color: var(--muted);
-            text-align: right;
-            flex-shrink: 0;
-            min-width: 26px;
-            padding-left: 2px;
+            font-size: 9.5px; color: var(--muted); text-align: right;
+            flex-shrink: 0; min-width: 26px; padding-left: 2px;
         }
-
         .mode-cell {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            gap: 4px;
-            padding: 3px 5px;
-            font-size: 10.5px;
+            display: flex; flex-direction: column; justify-content: center;
+            gap: 4px; padding: 3px 5px; font-size: 10.5px;
         }
-
-        .mode-cell label {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            cursor: pointer;
-            white-space: nowrap;
-        }
-
-        .mode-cell input[type="radio"] {
-            width: 12px;
-            height: 12px;
-            margin: 0;
-        }
-
-        .mode-cell .ratio {
-            margin-top: 2px;
-            font-size: 9.5px;
-            color: var(--muted);
-        }
-
-        .mode-cell .ratio strong {
-            color: var(--accent);
-        }
-
+        .mode-cell label { display: flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
+        .mode-cell input[type="radio"] { width: 12px; height: 12px; margin: 0; }
+        .mode-cell .ratio { margin-top: 2px; font-size: 9.5px; color: var(--muted); }
+        .mode-cell .ratio strong { color: var(--accent); }
         .hist-panel {
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            background: var(--panel);
-            padding: 4px 6px;
-            flex: 1 1 0;
-            display: flex;
-            flex-direction: column;
-            min-height: 72px;
+            border: 1px solid var(--border); border-radius: 3px; background: var(--panel);
+            padding: 4px 6px; flex: 1 1 0; display: flex; flex-direction: column; min-height: 72px;
         }
-
         .hist-container {
-            position: relative;
-            flex: 1 1 0;
-            width: 100%;
-            min-height: 52px;
-            overflow: hidden;
+            position: relative; flex: 1 1 0; width: 100%; min-height: 52px; overflow: hidden;
         }
-
-        .hist-panel.chart-pie {
-            min-height: 150px;
-        }
-
-        .hist-panel.chart-pie .hist-container {
-            min-height: 118px;
-        }
-
+        .hist-panel.chart-pie { min-height: 150px; }
+        .hist-panel.chart-pie .hist-container { min-height: 118px; }
         .output-panel {
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            background: var(--panel);
-            padding: 4px 6px;
-            flex: 1 1 0;
-            display: flex;
-            flex-direction: column;
-            min-height: 64px;
+            border: 1px solid var(--border); border-radius: 3px; background: var(--panel);
+            padding: 4px 6px; flex: 1 1 0; display: flex; flex-direction: column; min-height: 64px;
         }
-
         .output-header {
-            font-size: 10.5px;
-            color: var(--muted);
-            margin-bottom: 3px;
-            font-style: italic;
-            flex-shrink: 0;
+            font-size: 10.5px; color: var(--muted); margin-bottom: 3px;
+            font-style: italic; flex-shrink: 0;
         }
-
         .output-box {
-            flex: 1;
-            padding: 4px 6px;
-            background: var(--panel);
-            color: var(--text);
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            font-family: 'Consolas', 'Courier New', monospace;
-            font-size: 9.5px;
-            white-space: pre-wrap;
-            line-height: 1.35;
-            overflow-y: auto;
-            cursor: pointer;
-            transition: background 0.12s, border-color 0.12s;
-            min-height: 0;
+            flex: 1; padding: 4px 6px; background: var(--panel); color: var(--text);
+            border: 1px solid var(--border); border-radius: 3px;
+            font-family: 'Consolas', 'Courier New', monospace; font-size: 9.5px;
+            white-space: pre-wrap; line-height: 1.35; overflow-y: auto; cursor: pointer;
+            transition: background 0.12s, border-color 0.12s; min-height: 0;
         }
-
-        .output-box:hover {
-            background: var(--menu-bg);
-            border-color: var(--accent);
-        }
-
-        .output-box:active {
-            background: var(--border);
-        }
-
+        .output-box:hover { background: var(--menu-bg); border-color: var(--accent); }
+        .output-box:active { background: var(--border); }
         .statusbar {
-            padding: 4px 12px;
-            background: var(--menu-bg);
-            border-top: 1px solid var(--border);
-            font-size: 11.5px;
-            color: var(--text);
-            display: flex;
-            justify-content: space-between;
-            flex-shrink: 0;
-            gap: 8px;
+            padding: 4px 12px; background: var(--menu-bg); border-top: 1px solid var(--border);
+            font-size: 11.5px; color: var(--text); display: flex; justify-content: space-between;
+            flex-shrink: 0; gap: 8px; flex-wrap: wrap;
         }
+        .statusbar strong { color: var(--text); }
+        #storageModeIndicator.ok { color: var(--ok); font-weight: 600; }
+        #storageModeIndicator.warn { color: var(--danger); font-weight: 700; }
 
-        .statusbar strong {
-            color: var(--text);
+        /* Top-of-app banners */
+        .storage-warning {
+            display: none; align-items: center; gap: 10px; flex-shrink: 0;
+            padding: 8px 12px; background: var(--warnbg); color: var(--warnfg);
+            border: 1px solid var(--warnborder); border-radius: 3px; font-size: 11.5px;
+            flex-wrap: wrap;
         }
+        .storage-warning.show { display: flex; }
+        .storage-warning .grow { flex: 1; min-width: 200px; }
+        .storage-warning button {
+            padding: 4px 10px; font-size: 11px; border: 1px solid #b87d22;
+            background: #ffe6bd; color: var(--warnfg); border-radius: 3px; cursor: pointer;
+            font-weight: 700;
+        }
+        .storage-warning button:hover { background: #ffd79c; }
+        .storage-warning button.primary {
+            background: var(--accent); color: #fff; border-color: var(--accent);
+        }
+        .storage-warning button.primary:hover { filter: brightness(1.1); background: var(--accent); }
+
+        .resume-bar {
+            display: none; align-items: center; gap: 10px; flex-shrink: 0;
+            padding: 10px 12px; background: #e7f3ff; color: #0a4b8c;
+            border: 1px solid #8fc0f0; border-radius: 3px; font-size: 11.5px;
+            flex-wrap: wrap;
+        }
+        .resume-bar.show { display: flex; }
+        .resume-bar .grow { flex: 1; min-width: 200px; }
+        .resume-bar button {
+            padding: 5px 12px; font-size: 11px; font-weight: 700;
+            border: 1px solid var(--accent); background: var(--accent);
+            color: #fff; border-radius: 3px; cursor: pointer;
+        }
+        .resume-bar button:hover { filter: brightness(1.08); }
+        .resume-bar button.secondary {
+            background: transparent; color: #0a4b8c; border-color: #8fc0f0;
+        }
+        .resume-bar button.secondary:hover { background: #d7e8fb; }
 
         .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            inset: 0;
-            background-color: rgba(0, 0, 0, 0.42);
-            align-items: center;
-            justify-content: center;
+            display: none; position: fixed; z-index: 1000; inset: 0;
+            background-color: rgba(0, 0, 0, 0.42); align-items: center; justify-content: center;
         }
-
-        .modal.open {
-            display: flex;
-        }
-
+        .modal.open { display: flex; }
         .modal-content {
-            background-color: var(--panel);
-            color: var(--text);
-            padding: 16px 18px;
-            border: 1px solid var(--border);
-            width: 90%;
-            max-width: 420px;
-            border-radius: 6px;
-            position: relative;
-            box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28);
-            max-height: 88vh;
-            overflow-y: auto;
-            font-size: 11px;
+            background-color: var(--panel); color: var(--text); padding: 16px 18px;
+            border: 1px solid var(--border); width: 90%; max-width: 420px;
+            border-radius: 6px; position: relative;
+            box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28); max-height: 88vh;
+            overflow-y: auto; font-size: 11px;
         }
-
         .modal-content .close {
-            position: absolute;
-            right: 10px;
-            top: 6px;
-            font-size: 18px;
-            cursor: pointer;
-            color: var(--muted);
-            line-height: 1;
+            position: absolute; right: 10px; top: 6px; font-size: 18px;
+            cursor: pointer; color: var(--muted); line-height: 1;
         }
-
-        .modal-content .close:hover {
-            color: var(--text);
-        }
-
-        .modal-content h2 {
-            margin-bottom: 10px;
-            font-size: 12px;
-            color: var(--text);
-        }
-
-        .modal-content p {
-            margin-bottom: 6px;
-            font-size: 10px;
-            line-height: 1.4;
-            color: var(--muted);
-        }
-
+        .modal-content .close:hover { color: var(--text); }
+        .modal-content h2 { margin-bottom: 10px; font-size: 12px; color: var(--text); }
+        .modal-content p { margin-bottom: 6px; font-size: 10px; line-height: 1.4; color: var(--muted); }
         .modal-content button {
-            padding: 4px 10px;
-            background: var(--accent);
-            color: #fff;
-            border: none;
-            border-radius: 3px;
-            cursor: pointer;
-            font-size: 10.5px;
+            padding: 4px 10px; background: var(--accent); color: #fff; border: none;
+            border-radius: 3px; cursor: pointer; font-size: 10.5px;
         }
-
-        .modal-content button:hover {
-            filter: brightness(0.92);
-        }
-
+        .modal-content button:hover { filter: brightness(0.92); }
         .modal-content button.secondary {
-            background: transparent;
-            color: var(--text);
-            border: 1px solid var(--border);
+            background: transparent; color: var(--text); border: 1px solid var(--border);
         }
+        .modal-content button.secondary:hover { background: var(--border); }
+        .modal-content button:disabled { opacity: 0.55; cursor: not-allowed; filter: none; }
+        .modal-btn-row { display: flex; justify-content: space-between; gap: 6px; margin-top: 12px; }
 
-        .modal-content button.secondary:hover {
-            background: var(--border);
-        }
-
-        .modal-btn-row {
-            display: flex;
-            justify-content: space-between;
-            gap: 6px;
-            margin-top: 12px;
-        }
-
-        /* ---------- Custom confirm dialog ---------- */
-        .confirm-modal {
-            z-index: 1100;
-        }
-
-        .confirm-modal .modal-content {
-            max-width: 340px;
-        }
-
-        .confirm-modal .modal-content h2 {
-            font-size: 13px;
-            margin-bottom: 8px;
-            color: var(--text);
-        }
-
+        .confirm-modal { z-index: 1100; }
+        .confirm-modal .modal-content { max-width: 340px; }
+        .confirm-modal .modal-content h2 { font-size: 13px; margin-bottom: 8px; color: var(--text); }
         .confirm-modal .modal-content p {
-            margin-bottom: 14px;
-            font-size: 11.5px;
-            line-height: 1.55;
-            color: var(--text);
-            white-space: pre-wrap;
+            margin-bottom: 14px; font-size: 11.5px; line-height: 1.55;
+            color: var(--text); white-space: pre-wrap;
         }
-
-        .confirm-modal .modal-btn-row {
-            justify-content: flex-end;
-            gap: 8px;
-            margin-top: 0;
-        }
+        .confirm-modal .modal-btn-row { justify-content: flex-end; gap: 8px; margin-top: 0; }
 
         .pref-section {
-            margin-bottom: 10px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid var(--border);
+            margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
         }
-
-        .pref-section:last-child {
-            border-bottom: none;
-            margin-bottom: 0;
-            padding-bottom: 0;
-        }
-
+        .pref-section:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
         .pref-section h4 {
-            font-size: 9.5px;
-            margin-bottom: 5px;
-            color: var(--text);
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            font-weight: 700;
+            font-size: 9.5px; margin-bottom: 5px; color: var(--text);
+            text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700;
         }
-
         .pref-section select {
-            padding: 2px 6px;
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            background: var(--input-bg);
-            color: var(--text);
-            font-size: 10.5px;
-            width: 100%;
+            padding: 2px 6px; border: 1px solid var(--border); border-radius: 3px;
+            background: var(--input-bg); color: var(--text); font-size: 10.5px; width: 100%;
         }
-
         .pref-check {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            cursor: pointer;
-            font-size: 10.5px;
-            color: var(--text);
+            display: flex; align-items: center; gap: 6px; cursor: pointer;
+            font-size: 10.5px; color: var(--text);
         }
-
-        .pref-check input[type="checkbox"] {
-            width: 14px;
-            height: 14px;
-            margin: 0;
-        }
-
-        .volume-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 10px;
-        }
-
-        .volume-row input[type="range"] {
-            flex: 1;
-        }
-
-        .sound-row {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            margin-bottom: 4px;
-            font-size: 10px;
-        }
-
-        .sound-row label {
-            flex: 1;
-        }
-
-        .sound-row input[type="file"] {
-            max-width: 110px;
-            font-size: 8.5px;
-            color: var(--text);
-        }
-
-        .sound-row button {
-            padding: 2px 6px;
-            font-size: 9px;
-        }
-
+        .pref-check input[type="checkbox"] { width: 14px; height: 14px; margin: 0; }
+        .volume-row { display: flex; align-items: center; gap: 8px; font-size: 10px; }
+        .volume-row input[type="range"] { flex: 1; }
+        .sound-row { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; font-size: 10px; }
+        .sound-row label { flex: 1; }
+        .sound-row input[type="file"] { max-width: 110px; font-size: 8.5px; color: var(--text); }
+        .sound-row button { padding: 2px 6px; font-size: 9px; }
         .sound-status {
-            margin: -2px 0 6px 0;
-            padding-left: 2px;
-            font-size: 9px;
-            color: var(--muted);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            margin: -2px 0 6px 0; padding-left: 2px; font-size: 9px; color: var(--muted);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-
-        .sound-status.has-custom {
-            color: var(--accent);
-            font-weight: 600;
-        }
+        .sound-status.has-custom { color: var(--accent); font-weight: 600; }
 
         .layout-row {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            padding: 3px 0;
-            border-bottom: 1px solid var(--border);
-            font-size: 10.5px;
+            display: flex; align-items: center; gap: 6px; padding: 3px 0;
+            border-bottom: 1px solid var(--border); font-size: 10.5px;
         }
-
-        .layout-row:last-child {
-            border-bottom: none;
-        }
-
-        .layout-row span {
-            flex: 1;
-        }
-
+        .layout-row:last-child { border-bottom: none; }
+        .layout-row span { flex: 1; }
         .layout-row button {
-            padding: 1px 6px;
-            font-size: 9.5px;
-            background: transparent;
-            color: var(--text);
-            border: 1px solid var(--border);
+            padding: 1px 6px; font-size: 9.5px; background: transparent;
+            color: var(--text); border: 1px solid var(--border);
         }
-
-        .layout-row button:hover:not(:disabled) {
-            background: var(--border);
-        }
-
-        .layout-row button:disabled {
-            opacity: 0.35;
-            cursor: not-allowed;
-        }
+        .layout-row button:hover:not(:disabled) { background: var(--border); }
+        .layout-row button:disabled { opacity: 0.35; cursor: not-allowed; }
 
         .keybind-row {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 3px 0;
-            border-bottom: 1px solid var(--border);
-            font-size: 10.5px;
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 3px 0; border-bottom: 1px solid var(--border); font-size: 10.5px;
         }
-
-        .keybind-row:last-child {
-            border-bottom: none;
-        }
-
-        .keybind-row label {
-            flex: 1;
-        }
-
+        .keybind-row:last-child { border-bottom: none; }
+        .keybind-row label { flex: 1; }
         .keybind-row input {
-            width: 32px;
-            text-align: center;
-            padding: 1px;
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            background: var(--input-bg);
-            color: var(--text);
-            font-family: monospace;
-            font-size: 11px;
+            width: 32px; text-align: center; padding: 1px; border: 1px solid var(--border);
+            border-radius: 3px; background: var(--input-bg); color: var(--text);
+            font-family: monospace; font-size: 11px;
         }
-
-        .keybind-row input:focus {
-            outline: 2px solid var(--accent);
-        }
-
+        .keybind-row input:focus { outline: 2px solid var(--accent); }
         .keybind-heading {
-            margin: 12px 0 4px;
-            font-size: 9.5px;
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-            color: var(--text);
+            margin: 12px 0 4px; font-size: 9.5px; font-weight: 700;
+            letter-spacing: 0.5px; text-transform: uppercase; color: var(--text);
         }
 
-        .backlog-save-row {
-            display: flex;
-            gap: 6px;
-            align-items: stretch;
-        }
-
+        .backlog-save-row { display: flex; gap: 6px; align-items: stretch; }
         .backlog-save-row input {
-            flex: 1;
-            min-width: 0;
-            padding: 4px 7px;
-            border: 1px solid var(--border);
-            border-radius: 3px;
-            background: var(--input-bg);
-            color: var(--text);
-            font-size: 11px;
-            height: 24px;
+            flex: 1; min-width: 0; padding: 4px 7px; border: 1px solid var(--border);
+            border-radius: 3px; background: var(--input-bg); color: var(--text);
+            font-size: 11px; height: 24px;
         }
-
         .backlog-list {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            max-height: 42vh;
-            overflow-y: auto;
-            padding-right: 2px;
+            display: flex; flex-direction: column; gap: 4px; max-height: 42vh;
+            overflow-y: auto; padding-right: 2px;
         }
-
         .backlog-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 6px 8px;
-            border: 1px solid var(--border);
-            border-radius: 4px;
-            background: var(--menu-bg);
+            display: flex; align-items: center; gap: 8px; padding: 6px 8px;
+            border: 1px solid var(--border); border-radius: 4px; background: var(--menu-bg);
         }
-
-        .backlog-item .info {
-            flex: 1;
-            min-width: 0;
-        }
-
+        .backlog-item .info { flex: 1; min-width: 0; }
         .backlog-item .info .label {
-            font-weight: 700;
-            font-size: 11px;
-            color: var(--text);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            font-weight: 700; font-size: 11px; color: var(--text);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
         }
-
         .backlog-item .info .meta {
-            font-size: 9.5px;
-            color: var(--muted);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            margin-top: 1px;
+            font-size: 9.5px; color: var(--muted); white-space: nowrap;
+            overflow: hidden; text-overflow: ellipsis; margin-top: 1px;
         }
-
-        .backlog-item button {
-            padding: 3px 9px;
-            font-size: 9.5px;
-            flex-shrink: 0;
-        }
-
+        .backlog-item button { padding: 3px 9px; font-size: 9.5px; flex-shrink: 0; }
         .backlog-empty {
-            font-size: 10px;
-            color: var(--muted);
-            font-style: italic;
-            padding: 8px 0;
-            text-align: center;
+            font-size: 10px; color: var(--muted); font-style: italic;
+            padding: 8px 0; text-align: center;
+        }
+        .backlog-footer {
+            display: flex; justify-content: space-between; gap: 6px;
+            margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border);
         }
 
-        .backlog-footer {
-            display: flex;
-            justify-content: space-between;
-            gap: 6px;
-            margin-top: 12px;
-            padding-top: 10px;
-            border-top: 1px solid var(--border);
+        /* Session modal */
+        .session-status-box {
+            padding: 10px 12px; border-radius: 5px; font-size: 10.5px;
+            background: rgba(128,128,128,0.10); border-left: 4px solid var(--muted);
+            margin-bottom: 10px; line-height: 1.5;
+        }
+        .session-status-box.ok { border-left-color: var(--ok); }
+        .session-status-box.warn { border-left-color: var(--danger); background: rgba(231,76,60,0.08); }
+        .session-status-box .storage-mode {
+            display: block; font-size: 12px; font-weight: 700; margin-bottom: 4px;
+            color: var(--text);
+        }
+        .session-status-box.ok .storage-mode { color: var(--ok); }
+        .session-status-box.warn .storage-mode { color: var(--danger); }
+        .session-status-box .detail { color: var(--muted); font-size: 10.5px; }
+        .session-actions { display: flex; flex-direction: column; gap: 8px; }
+        .session-actions button, .session-actions label.filebtn {
+            padding: 10px 14px; font-size: 11.5px; font-weight: 600;
+            border-radius: 5px; border: 1px solid var(--accent); background: var(--accent);
+            color: #fff; cursor: pointer; text-align: center; font-family: inherit;
+            display: block; width: 100%;
+        }
+        .session-actions button:hover:not(:disabled), .session-actions label.filebtn:hover { filter: brightness(0.92); }
+        .session-actions button:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
+        .session-actions .secondary {
+            background: transparent; color: var(--text); border-color: var(--border);
+        }
+        .session-actions .secondary:hover { background: var(--border); }
+        .session-actions input[type="file"] { display: none; }
+
+        .auto-save-state {
+            display: flex; align-items: center; gap: 8px; margin-top: 6px;
+            padding: 8px 10px; border-radius: 4px; font-size: 10.5px;
+            background: rgba(46,139,87,0.10); border-left: 3px solid var(--ok); color: var(--text);
+        }
+        .auto-save-state .dot {
+            width: 8px; height: 8px; border-radius: 50%; background: var(--ok); flex-shrink: 0;
+        }
+        .auto-save-state.needs-permission {
+            background: rgba(230,150,20,0.12); border-left-color: #e07b00;
+        }
+        .auto-save-state.needs-permission .dot { background: #e07b00; }
+        .auto-save-state.off {
+            background: rgba(128,128,128,0.10); border-left-color: var(--muted);
+        }
+        .auto-save-state.off .dot { background: var(--muted); }
+        .auto-save-state .filename {
+            font-weight: 700; overflow: hidden; text-overflow: ellipsis;
+            white-space: nowrap; flex: 1; min-width: 0;
         }
 
         .toast {
-            position: fixed;
-            bottom: 16px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: var(--toast-bg);
-            color: var(--toast-text);
-            padding: 6px 14px;
-            border-radius: 4px;
-            font-size: 10.5px;
-            opacity: 0;
-            transition: opacity 0.3s;
-            pointer-events: none;
-            z-index: 2000;
+            position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%);
+            background: var(--toast-bg); color: var(--toast-text); padding: 6px 14px;
+            border-radius: 4px; font-size: 10.5px; opacity: 0; transition: opacity 0.3s;
+            pointer-events: none; z-index: 2000;
         }
-
-        .toast.show {
-            opacity: 1;
-        }
+        .toast.show { opacity: 1; }
 
         body.paused .app {
-            filter: grayscale(0.85) blur(2px);
-            opacity: 0.5;
-            pointer-events: none;
-            user-select: none;
+            filter: grayscale(0.85) blur(2px); opacity: 0.5;
+            pointer-events: none; user-select: none;
         }
-
         .pause-overlay {
-            position: fixed;
-            inset: 0;
-            z-index: 1500;
-            display: none;
-            align-items: center;
-            justify-content: center;
+            position: fixed; inset: 0; z-index: 1500; display: none;
+            align-items: center; justify-content: center;
             background: rgba(10, 14, 22, 0.62);
             -webkit-backdrop-filter: blur(5px) grayscale(0.6);
             backdrop-filter: blur(5px) grayscale(0.6);
-            cursor: pointer;
-            animation: pauseFade 0.18s ease-out;
+            cursor: pointer; animation: pauseFade 0.18s ease-out;
         }
-
-        .pause-overlay.show {
-            display: flex;
-        }
-
+        .pause-overlay.show { display: flex; }
         .pause-card {
-            text-align: center;
-            padding: 26px 40px;
-            border-radius: 12px;
+            text-align: center; padding: 26px 40px; border-radius: 12px;
             background: rgba(18, 22, 30, 0.9);
             border: 2px solid rgba(255, 255, 255, 0.28);
             box-shadow: 0 14px 46px rgba(0, 0, 0, 0.55);
-            color: #fff;
-            max-width: 90vw;
-            animation: pausePop 0.2s ease-out;
+            color: #fff; max-width: 90vw; animation: pausePop 0.2s ease-out;
         }
-
-        .pause-icon {
-            font-size: 36px;
-            line-height: 1;
-            margin-bottom: 8px;
-        }
-
+        .pause-icon { font-size: 36px; line-height: 1; margin-bottom: 8px; }
         .pause-card h1 {
-            font-size: 32px;
-            letter-spacing: 8px;
-            margin-bottom: 8px;
-            color: #ffd166;
-            text-shadow: 0 0 18px rgba(255, 209, 102, 0.45);
+            font-size: 32px; letter-spacing: 8px; margin-bottom: 8px;
+            color: #ffd166; text-shadow: 0 0 18px rgba(255, 209, 102, 0.45);
             animation: pausePulse 1.4s ease-in-out infinite;
         }
-
-        .pause-card p {
-            font-size: 11.5px;
-            color: #d8d8d8;
-            margin-bottom: 14px;
-            line-height: 1.5;
-        }
-
+        .pause-card p { font-size: 11.5px; color: #d8d8d8; margin-bottom: 14px; line-height: 1.5; }
         .pause-card button {
-            padding: 8px 22px;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0.4px;
-            border: none;
-            border-radius: 5px;
-            background: var(--accent);
-            color: #fff;
-            cursor: pointer;
+            padding: 8px 22px; font-size: 12px; font-weight: 700; letter-spacing: 0.4px;
+            border: none; border-radius: 5px; background: var(--accent); color: #fff; cursor: pointer;
         }
+        .pause-card button:hover { filter: brightness(1.1); }
+        @keyframes pauseFade { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes pausePop { from { transform: scale(0.94); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        @keyframes pausePulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
 
-        .pause-card button:hover {
-            filter: brightness(1.1);
-        }
-
-        @keyframes pauseFade {
-            from {
-                opacity: 0;
-            }
-
-            to {
-                opacity: 1;
-            }
-        }
-
-        @keyframes pausePop {
-            from {
-                transform: scale(0.94);
-                opacity: 0;
-            }
-
-            to {
-                transform: scale(1);
-                opacity: 1;
-            }
-        }
-
-        @keyframes pausePulse {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.45;
-            }
-        }
-
-        .about-content {
-            max-width: 470px;
-            padding: 0;
-            overflow: hidden;
-        }
-
+        .about-content { max-width: 470px; padding: 0; overflow: hidden; }
         .about-header {
-            position: relative;
-            padding: 20px 24px 16px;
-            text-align: center;
-            color: #fff;
-            background: linear-gradient(135deg, var(--titlebar) 0%, var(--accent) 140%);
+            position: relative; padding: 20px 24px 16px; text-align: center;
+            color: #fff; background: linear-gradient(135deg, var(--titlebar) 0%, var(--accent) 140%);
         }
-
-        .about-header .close {
-            top: 8px;
-            right: 12px;
-            font-size: 20px;
-            color: rgba(255, 255, 255, 0.78);
-        }
-
-        .about-header .close:hover {
-            color: #fff;
-        }
-
+        .about-header .close { top: 8px; right: 12px; font-size: 20px; color: rgba(255, 255, 255, 0.78); }
+        .about-header .close:hover { color: #fff; }
         .about-header .about-logo {
-            display: block;
-            width: 64px;
-            height: 64px;
-            margin: 0 auto 8px;
-            object-fit: contain;
-            border-radius: 14px;
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+            display: block; width: 64px; height: 64px; margin: 0 auto 8px;
+            object-fit: contain; border-radius: 14px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
         }
-
         .about-header h2 {
-            display: inline-block;
-            margin: 0;
-            font-size: 20px;
-            font-weight: 700;
-            letter-spacing: 0.6px;
-            color: #fff;
+            display: inline-block; margin: 0; font-size: 20px; font-weight: 700;
+            letter-spacing: 0.6px; color: #fff;
         }
-
         .about-version {
-            display: inline-block;
-            margin-left: 6px;
-            padding: 1px 7px;
-            font-size: 9.5px;
-            font-weight: 600;
-            letter-spacing: 0.4px;
-            vertical-align: middle;
-            border: 1px solid rgba(255, 255, 255, 0.4);
-            border-radius: 999px;
+            display: inline-block; margin-left: 6px; padding: 1px 7px; font-size: 9.5px;
+            font-weight: 600; letter-spacing: 0.4px; vertical-align: middle;
+            border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 999px;
             background: rgba(255, 255, 255, 0.2);
         }
-
         .about-header .about-update-btn {
-            display: inline-block;
-            margin-left: 8px;
-            padding: 3px 10px;
-            font-family: inherit;
-            font-size: 10px;
-            font-weight: 600;
-            letter-spacing: 0.3px;
-            vertical-align: middle;
-            white-space: nowrap;
-            border: 1px solid rgba(255, 255, 255, 0.5);
-            border-radius: 999px;
-            background: rgba(255, 255, 255, 0.15);
-            color: #fff;
-            cursor: pointer;
+            display: inline-block; margin-left: 8px; padding: 3px 10px;
+            font-family: inherit; font-size: 10px; font-weight: 600; letter-spacing: 0.3px;
+            vertical-align: middle; white-space: nowrap;
+            border: 1px solid rgba(255, 255, 255, 0.5); border-radius: 999px;
+            background: rgba(255, 255, 255, 0.15); color: #fff; cursor: pointer;
             transition: background 0.15s, border-color 0.15s, opacity 0.15s;
         }
-
         .about-header .about-update-btn:hover:not(:disabled) {
             background: rgba(255, 255, 255, 0.32);
-            border-color: rgba(255, 255, 255, 0.85);
-            filter: none;
+            border-color: rgba(255, 255, 255, 0.85); filter: none;
         }
-
-        .about-header .about-update-btn:disabled {
-            opacity: 0.55;
-            cursor: default;
-        }
-
+        .about-header .about-update-btn:disabled { opacity: 0.55; cursor: default; }
         .about-header .about-tagline {
-            margin: 7px 0 0;
-            font-size: 10px;
-            line-height: 1.45;
+            margin: 7px 0 0; font-size: 10px; line-height: 1.45;
             color: rgba(255, 255, 255, 0.88);
         }
-
-        .about-body {
-            padding: 14px 20px 6px;
-            max-height: 58vh;
-            overflow-y: auto;
-        }
-
-        .about-section {
-            margin-bottom: 13px;
-        }
-
-        .about-section:last-child {
-            margin-bottom: 4px;
-        }
-
+        .about-body { padding: 14px 20px 6px; max-height: 58vh; overflow-y: auto; }
+        .about-section { margin-bottom: 13px; }
+        .about-section:last-child { margin-bottom: 4px; }
         .about-section h4 {
-            margin-bottom: 4px;
-            font-size: 9.5px;
-            font-weight: 700;
-            letter-spacing: 0.6px;
-            text-transform: uppercase;
-            color: var(--accent);
+            margin-bottom: 4px; font-size: 9.5px; font-weight: 700;
+            letter-spacing: 0.6px; text-transform: uppercase; color: var(--accent);
         }
-
-        .about-section p {
-            margin-bottom: 5px;
-            font-size: 10.5px;
-            line-height: 1.5;
-            color: var(--text);
-        }
-
-        .about-section p:last-child {
-            margin-bottom: 0;
-        }
-
-        .about-section a {
-            color: var(--accent);
-            text-decoration: none;
-        }
-
-        .about-section a:hover {
-            text-decoration: underline;
-        }
-
+        .about-section p { margin-bottom: 5px; font-size: 10.5px; line-height: 1.5; color: var(--text); }
+        .about-section p:last-child { margin-bottom: 0; }
+        .about-section a { color: var(--accent); text-decoration: none; }
+        .about-section a:hover { text-decoration: underline; }
         .about-disclaimer {
-            padding: 9px 11px;
-            border-left: 3px solid var(--danger);
-            border-radius: 0 4px 4px 0;
-            background: rgba(128, 128, 128, 0.12);
+            padding: 9px 11px; border-left: 3px solid var(--danger);
+            border-radius: 0 4px 4px 0; background: rgba(128, 128, 128, 0.12);
         }
-
-        .about-disclaimer h4 {
-            color: var(--danger);
-        }
-
+        .about-disclaimer h4 { color: var(--danger); }
         .about-footer {
-            display: flex;
-            justify-content: flex-end;
-            padding: 10px 20px 14px;
-            border-top: 1px solid var(--border);
-            background: var(--menu-bg);
+            display: flex; justify-content: flex-end; padding: 10px 20px 14px;
+            border-top: 1px solid var(--border); background: var(--menu-bg);
         }
 
-        /* ---------- Small-window fallbacks ---------- */
         @media (max-width: 640px) {
-            .main {
-                padding: 4px 6px;
-                gap: 4px;
-            }
-
-            .titlebar {
-                padding: 3px 8px;
-            }
-
-            .menu {
-                gap: 12px;
-                padding: 3px 8px;
-            }
-
-            .statusbar {
-                padding: 3px 8px;
-            }
+            .main { padding: 4px 6px; gap: 4px; }
+            .titlebar { padding: 3px 8px; }
+            .menu { gap: 12px; padding: 3px 8px; }
+            .statusbar { padding: 3px 8px; }
         }
-
         @media (max-width: 400px) {
-            .diff-cell {
-                padding: 2px 4px;
-                gap: 2px;
-            }
-
-            .diff-cell .cell-label {
-                font-size: 9px;
-            }
-
-            .diff-cell .count-box {
-                width: 26px;
-            }
-
-            .diff-cell .spinner button {
-                width: 14px;
-            }
-
-            .diff-cell .pct {
-                min-width: 22px;
-                font-size: 9px;
-            }
+            .diff-cell { padding: 2px 4px; gap: 2px; }
+            .diff-cell .cell-label { font-size: 9px; }
+            .diff-cell .count-box { width: 26px; }
+            .diff-cell .spinner button { width: 14px; }
+            .diff-cell .pct { min-width: 22px; font-size: 9px; }
         }
-
         @media (max-height: 640px) {
-            .hist-panel {
-                min-height: 58px;
-            }
-
-            .hist-container {
-                min-height: 40px;
-            }
-
-            .hist-panel.chart-pie {
-                min-height: 120px;
-            }
-
-            .hist-panel.chart-pie .hist-container {
-                min-height: 96px;
-            }
-
-            .output-panel {
-                min-height: 52px;
-            }
+            .hist-panel { min-height: 58px; }
+            .hist-container { min-height: 40px; }
+            .hist-panel.chart-pie { min-height: 120px; }
+            .hist-panel.chart-pie .hist-container { min-height: 96px; }
+            .output-panel { min-height: 52px; }
         }
-
         @media (max-height: 520px) {
-            .main {
-                padding: 3px 5px;
-                gap: 3px;
-            }
-
-            .titlebar,
-            .menu,
-            .statusbar {
-                padding: 2px 8px;
-            }
-
-            .hist-panel,
-            .output-panel {
-                padding: 3px 5px;
-            }
-
-            .hist-panel {
-                min-height: 48px;
-            }
-
-            .hist-container {
-                min-height: 32px;
-            }
-
-            .hist-panel.chart-pie {
-                min-height: 96px;
-            }
-
-            .hist-panel.chart-pie .hist-container {
-                min-height: 76px;
-            }
-
-            .output-panel {
-                min-height: 42px;
-            }
-
-            .output-header {
-                font-size: 9.5px;
-                margin-bottom: 2px;
-            }
-
-            .diff-cell {
-                min-height: 22px;
-                padding: 2px 4px;
-            }
+            .main { padding: 3px 5px; gap: 3px; }
+            .titlebar, .menu, .statusbar { padding: 2px 8px; }
+            .hist-panel, .output-panel { padding: 3px 5px; }
+            .hist-panel { min-height: 48px; }
+            .hist-container { min-height: 32px; }
+            .hist-panel.chart-pie { min-height: 96px; }
+            .hist-panel.chart-pie .hist-container { min-height: 76px; }
+            .output-panel { min-height: 42px; }
+            .output-header { font-size: 9.5px; margin-bottom: 2px; }
+            .diff-cell { min-height: 22px; padding: 2px 4px; }
         }
 
-        /* ---------- MOBILE LAYOUT MODE ---------- */
-        /* Applied via body.layout-mobile class. Overrides all desktop rules
-           and media queries so the mobile layout is consistent regardless of
-           the actual window size (a desktop can force mobile mode and vice
-           versa). */
-        body.layout-mobile .titlebar {
-            padding: 10px 14px;
-            font-size: 14px;
-        }
-
-        body.layout-mobile .titlebar .close {
-            font-size: 18px;
-            padding: 0 6px;
-        }
-
-        body.layout-mobile .menu {
-            gap: 16px;
-            padding: 10px 14px;
-            font-size: 14px;
-        }
-
-        body.layout-mobile .main {
-            padding: 10px 12px;
-            gap: 10px;
-        }
-
-        body.layout-mobile .params-grid {
-            grid-template-columns: 1fr;
-            gap: 10px;
-            font-size: 14px;
-        }
-
+        body.layout-mobile .titlebar { padding: 10px 14px; font-size: 14px; }
+        body.layout-mobile .titlebar .close { font-size: 18px; padding: 0 6px; }
+        body.layout-mobile .menu { gap: 16px; padding: 10px 14px; font-size: 14px; }
+        body.layout-mobile .main { padding: 10px 12px; gap: 10px; }
+        body.layout-mobile .params-grid { grid-template-columns: 1fr; gap: 10px; font-size: 14px; }
         body.layout-mobile .params-grid>label {
-            font-size: 13px;
-            color: var(--muted);
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.4px;
+            font-size: 13px; color: var(--muted); font-weight: 600;
+            text-transform: uppercase; letter-spacing: 0.4px;
         }
-
-        body.layout-mobile .param-field {
-            justify-self: stretch;
-            width: 100%;
-        }
-
+        body.layout-mobile .param-field { justify-self: stretch; width: 100%; }
         body.layout-mobile .param-field input[type="number"] {
-            width: auto;
-            flex: 1 1 auto;
-            font-size: 16px;
-            height: 44px;
-            text-align: left;
-            padding: 6px 12px;
-            border-radius: 6px;
+            width: auto; flex: 1 1 auto; font-size: 16px; height: 44px;
+            text-align: left; padding: 6px 12px; border-radius: 6px;
         }
-
-        body.layout-mobile .param-field .unit {
-            font-size: 13px;
-            color: var(--muted);
-        }
-
-        body.layout-mobile .diff-grid {
-            grid-template-columns: 1fr;
-            gap: 8px;
-        }
-
+        body.layout-mobile .param-field .unit { font-size: 13px; color: var(--muted); }
+        body.layout-mobile .diff-grid { grid-template-columns: 1fr; gap: 8px; }
         body.layout-mobile .diff-cell {
-            padding: 10px 12px;
-            min-height: 60px;
-            gap: 10px;
-            border-radius: 6px;
+            padding: 10px 12px; min-height: 60px; gap: 10px; border-radius: 6px;
         }
-
-        body.layout-mobile .diff-cell .cell-label {
-            font-size: 14px;
-        }
-
+        body.layout-mobile .diff-cell .cell-label { font-size: 14px; }
         body.layout-mobile .diff-cell .count-box {
-            width: 64px;
-            font-size: 18px;
-            min-height: 40px;
-            padding: 6px 8px;
-            border-radius: 6px 0 0 6px;
+            width: 64px; font-size: 18px; min-height: 40px;
+            padding: 6px 8px; border-radius: 6px 0 0 6px;
         }
-
-        body.layout-mobile .diff-cell .spinner {
-            border-radius: 0 6px 6px 0;
-        }
-
-        body.layout-mobile .diff-cell .spinner button {
-            width: 40px;
-            height: 20px;
-            font-size: 11px;
-        }
-
-        body.layout-mobile .diff-cell .pct {
-            font-size: 13px;
-            min-width: 48px;
-            padding-left: 6px;
-        }
-
+        body.layout-mobile .diff-cell .spinner { border-radius: 0 6px 6px 0; }
+        body.layout-mobile .diff-cell .spinner button { width: 40px; height: 20px; font-size: 11px; }
+        body.layout-mobile .diff-cell .pct { font-size: 13px; min-width: 48px; padding-left: 6px; }
         body.layout-mobile .mode-cell {
-            grid-column: 1 / -1;
-            padding: 12px 14px;
-            font-size: 14px;
-            gap: 10px;
-            border-radius: 6px;
+            grid-column: 1 / -1; padding: 12px 14px; font-size: 14px;
+            gap: 10px; border-radius: 6px;
         }
-
-        body.layout-mobile .mode-cell label {
-            gap: 8px;
-        }
-
-        body.layout-mobile .mode-cell input[type="radio"] {
-            width: 20px;
-            height: 20px;
-        }
-
-        body.layout-mobile .mode-cell .ratio {
-            font-size: 13px;
-            margin-top: 6px;
-        }
-
-        body.layout-mobile .hist-panel {
-            padding: 10px 12px;
-            min-height: 200px;
-            border-radius: 6px;
-        }
-
-        body.layout-mobile .hist-container {
-            min-height: 170px;
-        }
-
-        body.layout-mobile .hist-panel.chart-pie {
-            min-height: 300px;
-        }
-
-        body.layout-mobile .hist-panel.chart-pie .hist-container {
-            min-height: 260px;
-        }
-
-        body.layout-mobile .output-panel {
-            padding: 10px 12px;
-            min-height: 160px;
-            border-radius: 6px;
-        }
-
-        body.layout-mobile .output-header {
-            font-size: 12px;
-            margin-bottom: 6px;
-        }
-
-        body.layout-mobile .output-box {
-            font-size: 12.5px;
-            line-height: 1.5;
-            padding: 8px 10px;
-        }
-
-        body.layout-mobile .statusbar {
-            padding: 10px 14px;
-            font-size: 13px;
-        }
-
-        /* Modals */
+        body.layout-mobile .mode-cell label { gap: 8px; }
+        body.layout-mobile .mode-cell input[type="radio"] { width: 20px; height: 20px; }
+        body.layout-mobile .mode-cell .ratio { font-size: 13px; margin-top: 6px; }
+        body.layout-mobile .hist-panel { padding: 10px 12px; min-height: 200px; border-radius: 6px; }
+        body.layout-mobile .hist-container { min-height: 170px; }
+        body.layout-mobile .hist-panel.chart-pie { min-height: 300px; }
+        body.layout-mobile .hist-panel.chart-pie .hist-container { min-height: 260px; }
+        body.layout-mobile .output-panel { padding: 10px 12px; min-height: 160px; border-radius: 6px; }
+        body.layout-mobile .output-header { font-size: 12px; margin-bottom: 6px; }
+        body.layout-mobile .output-box { font-size: 12.5px; line-height: 1.5; padding: 8px 10px; }
+        body.layout-mobile .statusbar { padding: 10px 14px; font-size: 13px; }
         body.layout-mobile .modal-content {
-            width: 94%;
-            max-width: 94%;
-            padding: 20px 18px;
-            font-size: 13px;
-            border-radius: 10px;
-            max-height: 92vh;
+            width: 94%; max-width: 94%; padding: 20px 18px; font-size: 13px;
+            border-radius: 10px; max-height: 92vh;
         }
-
-        body.layout-mobile .modal-content .close {
-            font-size: 24px;
-            right: 14px;
-            top: 10px;
-        }
-
-        body.layout-mobile .modal-content h2 {
-            font-size: 16px;
-            margin-bottom: 14px;
-        }
-
-        body.layout-mobile .modal-content p {
-            font-size: 12px;
-            line-height: 1.5;
-        }
-
-        body.layout-mobile .modal-content button {
-            padding: 10px 18px;
-            font-size: 13px;
-            border-radius: 6px;
-        }
-
-        body.layout-mobile .modal-btn-row {
-            flex-direction: column-reverse;
-            gap: 8px;
-        }
-
-        body.layout-mobile .modal-btn-row button {
-            width: 100%;
-        }
-
-        body.layout-mobile .pref-section {
-            margin-bottom: 14px;
-            padding-bottom: 12px;
-        }
-
-        body.layout-mobile .pref-section h4 {
-            font-size: 11px;
-            margin-bottom: 8px;
-        }
-
+        body.layout-mobile .modal-content .close { font-size: 24px; right: 14px; top: 10px; }
+        body.layout-mobile .modal-content h2 { font-size: 16px; margin-bottom: 14px; }
+        body.layout-mobile .modal-content p { font-size: 12px; line-height: 1.5; }
+        body.layout-mobile .modal-content button { padding: 10px 18px; font-size: 13px; border-radius: 6px; }
+        body.layout-mobile .modal-btn-row { flex-direction: column-reverse; gap: 8px; }
+        body.layout-mobile .modal-btn-row button { width: 100%; }
+        body.layout-mobile .pref-section { margin-bottom: 14px; padding-bottom: 12px; }
+        body.layout-mobile .pref-section h4 { font-size: 11px; margin-bottom: 8px; }
         body.layout-mobile .pref-section select {
-            font-size: 15px;
-            padding: 8px 12px;
-            height: 40px;
-            border-radius: 6px;
+            font-size: 15px; padding: 8px 12px; height: 40px; border-radius: 6px;
         }
-
-        body.layout-mobile .pref-check {
-            font-size: 13px;
-            gap: 10px;
-        }
-
-        body.layout-mobile .pref-check input[type="checkbox"] {
-            width: 22px;
-            height: 22px;
-        }
-
-        body.layout-mobile .volume-row {
-            font-size: 12px;
-        }
-
-        body.layout-mobile .sound-row {
-            font-size: 12px;
-            margin-bottom: 8px;
-            gap: 8px;
-        }
-
-        body.layout-mobile .sound-row button {
-            padding: 6px 12px;
-            font-size: 12px;
-        }
-
-        body.layout-mobile .sound-status {
-            font-size: 11px;
-            margin-bottom: 10px;
-        }
-
-        body.layout-mobile .layout-row {
-            font-size: 13px;
-            padding: 8px 0;
-        }
-
-        body.layout-mobile .layout-row input[type="checkbox"] {
-            width: 20px;
-            height: 20px;
-        }
-
-        body.layout-mobile .layout-row button {
-            font-size: 12px;
-            padding: 4px 12px;
-            border-radius: 4px;
-        }
-
-        body.layout-mobile .keybind-row {
-            font-size: 13px;
-            padding: 8px 0;
-        }
-
+        body.layout-mobile .pref-check { font-size: 13px; gap: 10px; }
+        body.layout-mobile .pref-check input[type="checkbox"] { width: 22px; height: 22px; }
+        body.layout-mobile .volume-row { font-size: 12px; }
+        body.layout-mobile .sound-row { font-size: 12px; margin-bottom: 8px; gap: 8px; }
+        body.layout-mobile .sound-row button { padding: 6px 12px; font-size: 12px; }
+        body.layout-mobile .sound-status { font-size: 11px; margin-bottom: 10px; }
+        body.layout-mobile .layout-row { font-size: 13px; padding: 8px 0; }
+        body.layout-mobile .layout-row input[type="checkbox"] { width: 20px; height: 20px; }
+        body.layout-mobile .layout-row button { font-size: 12px; padding: 4px 12px; border-radius: 4px; }
+        body.layout-mobile .keybind-row { font-size: 13px; padding: 8px 0; }
         body.layout-mobile .keybind-row input {
-            width: 48px;
-            font-size: 15px;
-            padding: 6px;
-            border-radius: 5px;
+            width: 48px; font-size: 15px; padding: 6px; border-radius: 5px;
         }
-
-        body.layout-mobile .keybind-heading {
-            font-size: 11px;
-            margin: 14px 0 6px;
-        }
-
+        body.layout-mobile .keybind-heading { font-size: 11px; margin: 14px 0 6px; }
         body.layout-mobile .backlog-save-row input {
-            font-size: 15px;
-            height: 42px;
-            padding: 8px 12px;
-            border-radius: 6px;
+            font-size: 15px; height: 42px; padding: 8px 12px; border-radius: 6px;
         }
-
-        body.layout-mobile .backlog-item {
-            padding: 12px 14px;
-            border-radius: 8px;
-        }
-
-        body.layout-mobile .backlog-item .info .label {
-            font-size: 14px;
-        }
-
-        body.layout-mobile .backlog-item .info .meta {
-            font-size: 11px;
-            margin-top: 3px;
-        }
-
-        body.layout-mobile .backlog-item button {
-            padding: 8px 14px;
-            font-size: 12px;
-            border-radius: 5px;
-        }
-
-        /* Pause overlay */
-        body.layout-mobile .pause-card {
-            padding: 30px 28px;
-            border-radius: 14px;
-        }
-
-        body.layout-mobile .pause-card h1 {
-            font-size: 30px;
-            letter-spacing: 6px;
-        }
-
-        body.layout-mobile .pause-card p {
-            font-size: 12.5px;
-        }
-
-        body.layout-mobile .pause-card button {
-            padding: 12px 28px;
-            font-size: 14px;
-        }
-
-        /* About modal */
-        body.layout-mobile .about-content {
-            max-width: 94%;
-        }
-
-        body.layout-mobile .about-header {
-            padding: 24px 20px 20px;
-        }
-
-        body.layout-mobile .about-header .about-logo {
-            width: 76px;
-            height: 76px;
-        }
-
-        body.layout-mobile .about-header h2 {
-            font-size: 24px;
-        }
-
+        body.layout-mobile .backlog-item { padding: 12px 14px; border-radius: 8px; }
+        body.layout-mobile .backlog-item .info .label { font-size: 14px; }
+        body.layout-mobile .backlog-item .info .meta { font-size: 11px; margin-top: 3px; }
+        body.layout-mobile .backlog-item button { padding: 8px 14px; font-size: 12px; border-radius: 5px; }
+        body.layout-mobile .pause-card { padding: 30px 28px; border-radius: 14px; }
+        body.layout-mobile .pause-card h1 { font-size: 30px; letter-spacing: 6px; }
+        body.layout-mobile .pause-card p { font-size: 12.5px; }
+        body.layout-mobile .pause-card button { padding: 12px 28px; font-size: 14px; }
+        body.layout-mobile .about-content { max-width: 94%; }
+        body.layout-mobile .about-header { padding: 24px 20px 20px; }
+        body.layout-mobile .about-header .about-logo { width: 76px; height: 76px; }
+        body.layout-mobile .about-header h2 { font-size: 24px; }
         body.layout-mobile .about-header .about-update-btn {
-            display: block;
-            margin: 10px auto 0;
-            width: fit-content;
-            font-size: 12px;
-            padding: 6px 16px;
+            display: block; margin: 10px auto 0; width: fit-content;
+            font-size: 12px; padding: 6px 16px;
         }
-
-        body.layout-mobile .about-header .about-tagline {
-            font-size: 11.5px;
-        }
-
-        body.layout-mobile .about-body {
-            padding: 18px 22px 6px;
-        }
-
-        body.layout-mobile .about-section h4 {
-            font-size: 10.5px;
-        }
-
-        body.layout-mobile .about-section p {
-            font-size: 12px;
-        }
-
-        /* Toast */
+        body.layout-mobile .about-header .about-tagline { font-size: 11.5px; }
+        body.layout-mobile .about-body { padding: 18px 22px 6px; }
+        body.layout-mobile .about-section h4 { font-size: 10.5px; }
+        body.layout-mobile .about-section p { font-size: 12px; }
         body.layout-mobile .toast {
-            bottom: 24px;
-            padding: 10px 20px;
-            font-size: 13px;
-            border-radius: 6px;
+            bottom: 24px; padding: 10px 20px; font-size: 13px; border-radius: 6px;
+        }
+        body.layout-mobile .hint-bubble { font-size: 12px; max-width: 260px; padding: 10px 12px; }
+        body.layout-mobile .hint-bubble .hint-btn { padding: 5px 14px; font-size: 11.5px; }
+        body.layout-mobile .session-actions button, body.layout-mobile .session-actions label.filebtn {
+            font-size: 14px; padding: 14px 16px;
+        }
+        body.layout-mobile .storage-warning, body.layout-mobile .resume-bar {
+            font-size: 12.5px; padding: 12px;
+        }
+        body.layout-mobile .storage-warning button, body.layout-mobile .resume-bar button {
+            font-size: 13px; padding: 8px 14px;
         }
 
-        /* Hint bubble */
-        body.layout-mobile .hint-bubble {
-            font-size: 12px;
-            max-width: 260px;
-            padding: 10px 12px;
-        }
-
-        body.layout-mobile .hint-bubble .hint-btn {
-            padding: 5px 14px;
-            font-size: 11.5px;
-        }
-
-        /* ---------- MOBILE NUMPAD DATA ENTRY ---------- */
-        .numpad-cell {
-            display: none;
-        }
-
+        .numpad-cell { display: none; }
         body.layout-mobile .numpad-cell {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            grid-column: 1 / -1;
+            display: flex; flex-direction: column; gap: 8px; grid-column: 1 / -1;
         }
-
-        /* Numpad replaces the per-cell list on mobile… */
-        body.layout-mobile .diff-cell {
-            display: none;
-        }
-
-        /* …unless the user switches to List view */
-        body.layout-mobile.mobile-list .diff-cell {
-            display: flex;
-        }
-
-        body.layout-mobile.mobile-list .numpad-cell {
-            display: none;
-        }
+        body.layout-mobile .diff-cell { display: none; }
+        body.layout-mobile.mobile-list .diff-cell { display: flex; }
+        body.layout-mobile.mobile-list .numpad-cell { display: none; }
 
         .numpad-head {
-            display: flex;
-            align-items: baseline;
-            justify-content: space-between;
-            gap: 8px;
-            padding: 0 2px;
+            display: flex; align-items: baseline; justify-content: space-between;
+            gap: 8px; padding: 0 2px;
         }
-
-        .numpad-total {
-            font-size: 13px;
-            font-weight: 800;
-            color: var(--text);
-        }
-
+        .numpad-total { font-size: 13px; font-weight: 800; color: var(--text); }
         .numpad-hint {
-            font-size: 10px;
-            font-weight: 700;
-            letter-spacing: 0.4px;
-            text-transform: uppercase;
-            color: var(--muted);
+            font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+            text-transform: uppercase; color: var(--muted);
         }
-
-        .numpad-grid {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 8px;
-        }
-
+        .numpad-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
         .np-btn {
-            position: relative;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            min-height: 96px;
-            padding: 14px 6px 10px;
-            border: none;
-            border-radius: 14px;
-            background: var(--np-color, var(--accent));
-            color: var(--np-text, #fff);
-            font-family: inherit;
-            cursor: pointer;
-            user-select: none;
-            -webkit-user-select: none;
-            -webkit-tap-highlight-color: transparent;
-            -webkit-touch-callout: none;
+            position: relative; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; gap: 6px; min-height: 96px;
+            padding: 14px 6px 10px; border: none; border-radius: 14px;
+            background: var(--np-color, var(--accent)); color: var(--np-text, #fff);
+            font-family: inherit; cursor: pointer; user-select: none; -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none;
             touch-action: manipulation;
             box-shadow: 0 3px 0 rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.28);
             transition: transform 0.07s ease, box-shadow 0.07s ease, filter 0.12s ease;
         }
-
         .np-btn:active {
             transform: translateY(3px);
             box-shadow: 0 0 0 rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.28);
             filter: brightness(1.15);
         }
-
         .np-btn .np-key {
-            position: absolute;
-            top: 7px;
-            left: 9px;
+            position: absolute; top: 7px; left: 9px;
             font-family: 'Consolas', 'Courier New', monospace;
-            font-size: 11px;
-            font-weight: 800;
-            opacity: 0.7;
+            font-size: 11px; font-weight: 800; opacity: 0.7;
         }
-
         .np-btn .np-count {
-            font-size: 30px;
-            font-weight: 800;
-            line-height: 1;
-            font-variant-numeric: tabular-nums;
-            opacity: 0.42;
-            transition: opacity 0.15s ease;
+            font-size: 30px; font-weight: 800; line-height: 1;
+            font-variant-numeric: tabular-nums; opacity: 0.42; transition: opacity 0.15s ease;
         }
-
-        .np-btn.has-count .np-count {
-            opacity: 1;
-        }
-
+        .np-btn.has-count .np-count { opacity: 1; }
         .np-btn .np-name {
-            font-size: 11.5px;
-            font-weight: 700;
-            line-height: 1.15;
-            text-align: center;
-            letter-spacing: 0.2px;
-            overflow-wrap: anywhere;
+            font-size: 11.5px; font-weight: 700; line-height: 1.15;
+            text-align: center; letter-spacing: 0.2px; overflow-wrap: anywhere;
         }
-
-        .entry-toggle {
-            display: none;
-        }
-
-        body.layout-mobile .entry-toggle {
-            display: flex;
-            gap: 6px;
-            margin-top: 10px;
-        }
-
+        .entry-toggle { display: none; }
+        body.layout-mobile .entry-toggle { display: flex; gap: 6px; margin-top: 10px; }
         body.layout-mobile .entry-toggle button {
-            flex: 1;
-            padding: 9px 10px;
-            font-family: inherit;
-            font-size: 12px;
-            border: 1px solid var(--border);
-            border-radius: 6px;
-            background: var(--panel);
-            color: var(--text);
-            cursor: pointer;
+            flex: 1; padding: 9px 10px; font-family: inherit; font-size: 12px;
+            border: 1px solid var(--border); border-radius: 6px;
+            background: var(--panel); color: var(--text); cursor: pointer;
         }
-
         body.layout-mobile .entry-toggle button.active {
-            background: var(--accent);
-            border-color: var(--accent);
-            color: #fff;
-            font-weight: 700;
+            background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700;
         }
 
-        ::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-
-        ::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        ::-webkit-scrollbar-thumb {
-            background: var(--border);
-            border-radius: 4px;
-        }
-
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--muted);
-        }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
     </style>
 </head>
 
@@ -1836,6 +734,7 @@ See the LICENSE file for details.
         <div class="menu">
             <span onclick="copyOutput()">Copy</span>
             <span onclick="confirmReset()">Reset</span>
+            <span id="sessionMenuBtn" onclick="openSession()">Save/Load</span>
             <span onclick="openBacklog()">Backlog</span>
             <span onclick="openModal('preferencesModal')">Preferences</span>
             <span onclick="openModal('keysModal')">Customize Keys</span>
@@ -1843,6 +742,30 @@ See the LICENSE file for details.
         </div>
 
         <div class="main" id="mainArea">
+            <!-- One-click resume bar: shown only when we have a saved file handle
+                 but the browser needs a user gesture to re-grant permission. -->
+            <div class="resume-bar" id="resumeBar">
+                <span>↺</span>
+                <span class="grow">
+                    Your previous session file is ready. Click <strong>Resume session</strong> to
+                    load your counts, backlog, and preferences from <span id="resumeFileName">the session file</span>.
+                </span>
+                <button type="button" onclick="resumeSessionFromHandle()">Resume session</button>
+                <button type="button" class="secondary" onclick="dismissResumeBar()">Not now</button>
+            </div>
+
+            <!-- Storage warning: shown when no persistent storage is available. -->
+            <div class="storage-warning" id="storageWarning">
+                <span>⚠</span>
+                <span class="grow" id="storageWarningText">
+                    This browser blocks persistent storage, so your counts will be lost when you close it.
+                </span>
+                <button type="button" class="primary" id="enableAutoSaveBtn" onclick="chooseSessionFile()">
+                    Enable auto-save to file
+                </button>
+                <button type="button" onclick="openSession()">Session…</button>
+            </div>
+
             <div class="top-section" data-section="params">
                 <div class="params-grid">
                     <label for="hgb">Haemoglobin</label>
@@ -1850,19 +773,16 @@ See the LICENSE file for details.
                         <input type="number" id="hgb" value="12" step="0.1" min="0">
                         <span class="unit">g/dL</span>
                     </div>
-
                     <label for="mcv">Mean Corpuscular Volume</label>
                     <div class="param-field">
                         <input type="number" id="mcv" value="82" step="0.1" min="0">
                         <span class="unit">fL</span>
                     </div>
-
                     <label for="wbc">White blood cells</label>
                     <div class="param-field">
                         <input type="number" id="wbc" value="9" step="0.1" min="0">
                         <span class="unit">×10⁹/L</span>
                     </div>
-
                     <label for="plt">Platelets</label>
                     <div class="param-field">
                         <input type="number" id="plt" value="460" step="1" min="0">
@@ -1887,6 +807,7 @@ See the LICENSE file for details.
 
         <div class="statusbar">
             <span>Total cells counted: <strong id="totalCount">0</strong></span>
+            <span>Storage: <strong id="storageModeIndicator">…</strong></span>
             <span>HaemCount v1.0</span>
         </div>
     </div>
@@ -1901,11 +822,68 @@ See the LICENSE file for details.
         </div>
     </div>
 
+    <!-- SESSION MODAL -->
+    <div id="sessionModal" class="modal">
+        <div class="modal-content" style="max-width: 520px;">
+            <span class="close" onclick="closeModal('sessionModal')">&times;</span>
+            <h2>Save / Load Session</h2>
+
+            <div class="session-status-box" id="sessionStatusBox">
+                <span class="storage-mode" id="sessionStorageMode">…</span>
+                <span class="detail" id="sessionStorageDetail"></span>
+            </div>
+
+            <!-- Auto-save file -->
+            <div class="pref-section" id="autoSaveSection">
+                <h4>Auto-save to a file (recommended)</h4>
+                <p style="margin-bottom: 8px;">
+                    Pick a file once, and HaemCount will keep it up to date after every change
+                    and load it automatically next time this window opens. The file is stored
+                    outside the browser, so it survives the browser clearing its data.
+                </p>
+                <div class="auto-save-state off" id="autoSaveState">
+                    <span class="dot"></span>
+                    <span class="filename" id="autoSaveFileName">Auto-save is off</span>
+                </div>
+                <div class="session-actions" style="margin-top: 8px;">
+                    <button type="button" id="autoSaveChooseBtn" onclick="chooseSessionFile()">
+                        📎 Choose session file…
+                    </button>
+                    <button type="button" class="secondary" id="autoSaveForgetBtn"
+                        onclick="forgetSessionFile()" style="display:none;">
+                        Disconnect session file
+                    </button>
+                </div>
+            </div>
+
+            <div class="pref-section">
+                <h4>Manual save / load</h4>
+                <p style="margin-bottom: 8px;">
+                    Downloads or restores a one-off session snapshot. Useful if the auto-save
+                    file is not available in this browser.
+                </p>
+                <div class="session-actions">
+                    <button type="button" class="secondary" onclick="saveSessionToFile()">
+                        💾 Download session file
+                    </button>
+                    <label class="filebtn" for="sessionFileInput" style="background: transparent; color: var(--text); border: 1px solid var(--border);">
+                        📂 Load session from file…
+                    </label>
+                    <input type="file" id="sessionFileInput" accept=".json,application/json"
+                        onchange="handleSessionFileInput(this)">
+                </div>
+            </div>
+
+            <div class="modal-btn-row">
+                <button class="secondary" onclick="closeModal('sessionModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
     <div id="backlogModal" class="modal">
         <div class="modal-content" style="max-width: 560px;">
             <span class="close" onclick="closeModal('backlogModal')">&times;</span>
             <h2>Backlog</h2>
-
             <div class="pref-section">
                 <h4>Save Current</h4>
                 <div class="backlog-save-row">
@@ -1916,12 +894,10 @@ See the LICENSE file for details.
                 <p style="margin-top: 6px;">Saves the current counts, blood parameters, sample type and the Other label.
                 </p>
             </div>
-
             <div class="pref-section">
                 <h4>Saved Entries</h4>
                 <div id="backlogList" class="backlog-list"></div>
             </div>
-
             <div class="backlog-footer">
                 <button class="secondary" onclick="confirmClearBacklog()">Clear All</button>
                 <button onclick="closeModal('backlogModal')">Close</button>
@@ -1942,7 +918,6 @@ See the LICENSE file for details.
                     <option value="mobile">Mobile</option>
                 </select>
             </div>
-
             <div class="pref-section">
                 <h4>Theme</h4>
                 <select id="themeSelect" onchange="applyTheme(this.value)">
@@ -2013,10 +988,8 @@ See the LICENSE file for details.
             <p>Click a field and press a key to assign. Press Backspace to clear. Leave an action blank to disable it.
             </p>
             <div id="keybindList"></div>
-
             <div class="keybind-heading">Actions</div>
             <div id="actionKeybindList"></div>
-
             <div class="modal-btn-row">
                 <button class="secondary" onclick="resetKeybindsToDefault()">Reset to Default</button>
                 <button onclick="saveKeybinds()">Save Keybinds</button>
@@ -2035,43 +1008,34 @@ See the LICENSE file for details.
                     onclick="checkForUpdateManually()">↻ Check for update</button>
                 <p class="about-tagline">A web reimplementation of the HEMCOUNT differential cell counter</p>
             </div>
-
             <div class="about-body">
                 <div class="about-section">
                     <h4>Copyright</h4>
                     <p>© 2026 Tiffany Lau. All rights reserved.</p>
                 </div>
-
                 <div class="about-section">
                     <h4>Credits</h4>
                     <p>Inspired by the original <strong>HEMCOUNT</strong> by Nelson Chan
                         (<a href="https://github.com/nelsonchanhk/HEMCOUNT" target="_blank"
                             rel="noopener">@nelsonchanhk</a>).</p>
                 </div>
-
                 <div class="about-section">
                     <h4>License</h4>
                     <p>GNU General Public License v3.0 (GPLv3).</p>
-                    <p>This program comes with <strong>ABSOLUTELY NO WARRANTY</strong>. You are welcome to
-                        redistribute it under certain conditions. See the LICENSE file for details.</p>
+                    <p>This program comes with <strong>ABSOLUTELY NO WARRANTY</strong>.</p>
                 </div>
-
                 <div class="about-section about-disclaimer">
                     <h4>Disclaimer</h4>
                     <p>For educational and research support only. <strong>Not a medical device.</strong></p>
-                    <p>Must not be used as the sole basis for clinical diagnosis or patient management. All clinical
-                        decisions must be made by qualified healthcare professionals using validated laboratory systems.
-                    </p>
+                    <p>Must not be used as the sole basis for clinical diagnosis or patient management.</p>
                 </div>
             </div>
-
             <div class="about-footer">
                 <button onclick="closeModal('aboutModal')">Close</button>
             </div>
         </div>
     </div>
 
-    <!-- Custom confirm dialog (replaces native confirm/alert) -->
     <div id="confirmModal" class="modal confirm-modal">
         <div class="modal-content">
             <h2 id="confirmTitle">Confirm</h2>
@@ -2103,74 +1067,22 @@ See the LICENSE file for details.
         ];
 
         const HIST_ORDER = ['blast', 'promy', 'mye', 'meta', 'band', 'lym', 'mono', 'other', 'eos', 'baso', 'plasma', 'nRBC'];
-
-        const PIE_ORDER = [
-            'blast', 'promy', 'mye', 'meta', 'band',
-            'mono', 'eos', 'baso',
-            'nRBC',
-            'lym', 'plasma', 'other'
-        ];
+        const PIE_ORDER = ['blast', 'promy', 'mye', 'meta', 'band', 'mono', 'eos', 'baso', 'nRBC', 'lym', 'plasma', 'other'];
 
         const CELL_COLORS = {
-            blast: '#08306b',
-            promy: '#10529e',
-            mye: '#1c74c9',
-            meta: '#4696e0',
-            band: '#84bdf0',
-            eos: '#00a6c8',
-            baso: '#5a63d0',
-            mono: '#2c7f9e',
-            nRBC: '#d62828',
-            lym: '#43a047',
-            other: '#f4a261',
-            plasma: '#9b59b6'
+            blast: '#08306b', promy: '#10529e', mye: '#1c74c9', meta: '#4696e0',
+            band: '#84bdf0', eos: '#00a6c8', baso: '#5a63d0', mono: '#2c7f9e',
+            nRBC: '#d62828', lym: '#43a047', other: '#f4a261', plasma: '#9b59b6'
         };
-
         const FALLBACK_PIE_COLOR = '#8a8a8a';
 
         const THEMES = {
-            light: {
-                bg: '#ebebeb', panel: '#ffffff', border: '#c0c0c0',
-                accent: '#2c7be5', danger: '#e74c3c', text: '#1e1e1e', muted: '#6b6b6b',
-                titlebar: '#3a3a3a', titlebarText: '#ffffff',
-                menuBg: '#f5f5f5', inputBg: '#ffffff',
-                toastBg: '#2b2b2b', toastText: '#ffffff'
-            },
-            dark: {
-                bg: '#161616', panel: '#232323', border: '#3d3d3d',
-                accent: '#5aa3ff', danger: '#ff6b6b', text: '#e4e4e4', muted: '#9a9a9a',
-                titlebar: '#000000', titlebarText: '#f0f0f0',
-                menuBg: '#1c1c1c', inputBg: '#161616',
-                toastBg: '#4a4a4a', toastText: '#ffffff'
-            },
-            solarizedLight: {
-                bg: '#fdf6e3', panel: '#eee8d5', border: '#b5ad95',
-                accent: '#268bd2', danger: '#dc322f', text: '#073642', muted: '#657b83',
-                titlebar: '#002b36', titlebarText: '#eee8d5',
-                menuBg: '#f5efdc', inputBg: '#e2dbc0',
-                toastBg: '#002b36', toastText: '#eee8d5'
-            },
-            solarizedDark: {
-                bg: '#002b36', panel: '#073642', border: '#586e75',
-                accent: '#268bd2', danger: '#dc322f', text: '#eee8d5', muted: '#93a1a1',
-                titlebar: '#001f27', titlebarText: '#eee8d5',
-                menuBg: '#073642', inputBg: '#002b36',
-                toastBg: '#001f27', toastText: '#eee8d5'
-            },
-            sepia: {
-                bg: '#f4ecd8', panel: '#fdf6e3', border: '#d3c7a8',
-                accent: '#a67c00', danger: '#b84a3b', text: '#3a3020', muted: '#7a6a4a',
-                titlebar: '#5a4a2a', titlebarText: '#fdf6e3',
-                menuBg: '#ede4c8', inputBg: '#fdf6e3',
-                toastBg: '#5a4a2a', toastText: '#fdf6e3'
-            },
-            pink: {
-                bg: '#fdeef4', panel: '#ffffff', border: '#f2b8d0',
-                accent: '#e0559a', danger: '#d6336c', text: '#3d1f2c', muted: '#9a6b80',
-                titlebar: '#8e2a56', titlebarText: '#ffe8f2',
-                menuBg: '#fce3ee', inputBg: '#ffffff',
-                toastBg: '#8e2a56', toastText: '#ffe8f2'
-            }
+            light: { bg: '#ebebeb', panel: '#ffffff', border: '#c0c0c0', accent: '#2c7be5', danger: '#e74c3c', text: '#1e1e1e', muted: '#6b6b6b', titlebar: '#3a3a3a', titlebarText: '#ffffff', menuBg: '#f5f5f5', inputBg: '#ffffff', toastBg: '#2b2b2b', toastText: '#ffffff' },
+            dark: { bg: '#161616', panel: '#232323', border: '#3d3d3d', accent: '#5aa3ff', danger: '#ff6b6b', text: '#e4e4e4', muted: '#9a9a9a', titlebar: '#000000', titlebarText: '#f0f0f0', menuBg: '#1c1c1c', inputBg: '#161616', toastBg: '#4a4a4a', toastText: '#ffffff' },
+            solarizedLight: { bg: '#fdf6e3', panel: '#eee8d5', border: '#b5ad95', accent: '#268bd2', danger: '#dc322f', text: '#073642', muted: '#657b83', titlebar: '#002b36', titlebarText: '#eee8d5', menuBg: '#f5efdc', inputBg: '#e2dbc0', toastBg: '#002b36', toastText: '#eee8d5' },
+            solarizedDark: { bg: '#002b36', panel: '#073642', border: '#586e75', accent: '#268bd2', danger: '#dc322f', text: '#eee8d5', muted: '#93a1a1', titlebar: '#001f27', titlebarText: '#eee8d5', menuBg: '#073642', inputBg: '#002b36', toastBg: '#001f27', toastText: '#eee8d5' },
+            sepia: { bg: '#f4ecd8', panel: '#fdf6e3', border: '#d3c7a8', accent: '#a67c00', danger: '#b84a3b', text: '#3a3020', muted: '#7a6a4a', titlebar: '#5a4a2a', titlebarText: '#fdf6e3', menuBg: '#ede4c8', inputBg: '#fdf6e3', toastBg: '#5a4a2a', toastText: '#fdf6e3' },
+            pink: { bg: '#fdeef4', panel: '#ffffff', border: '#f2b8d0', accent: '#e0559a', danger: '#d6336c', text: '#3d1f2c', muted: '#9a6b80', titlebar: '#8e2a56', titlebarText: '#ffe8f2', menuBg: '#fce3ee', inputBg: '#ffffff', toastBg: '#8e2a56', toastText: '#ffe8f2' }
         };
 
         let counts = {};
@@ -2182,23 +1094,16 @@ See the LICENSE file for details.
         let chartType = 'bar';
         let customSounds = { normal: null, century: null };
         let otherLabelValue = 'other';
-
-        // ---------- Layout mode (view) ----------
         let layoutMode = 'auto';
-
         const MOBILE_SCREEN_BREAKPOINT = 700;
         let lastAppliedMobile = null;
-
-        // Mobile data-entry style: 'numpad' (default) or 'list'
         let mobileEntry = 'numpad';
 
         let layoutOrder = ['params', 'diff', 'hist', 'output'];
         let layoutVisible = { params: true, diff: true, hist: true, output: true };
         const SECTION_NAMES = {
-            params: 'Blood Parameters',
-            diff: 'Differential Count',
-            hist: 'Histogram',
-            output: 'Output Preview'
+            params: 'Blood Parameters', diff: 'Differential Count',
+            hist: 'Histogram', output: 'Output Preview'
         };
 
         const DEFAULT_KEY_MAP = {
@@ -2210,7 +1115,6 @@ See the LICENSE file for details.
 
         const DEFAULT_ACTION_KEYS = { toggleMode: '-', reset: '' };
         let actionKeys = Object.assign({}, DEFAULT_ACTION_KEYS);
-
         const ACTION_DEFS = [
             { key: 'toggleMode', label: 'Switch sample type (bone / peripheral)' },
             { key: 'reset', label: 'Reset all counts' }
@@ -2219,15 +1123,10 @@ See the LICENSE file for details.
         let warnBeforeReset = true;
 
         // ---------- Unified persistent storage ----------
-        // Browsers in managed environments sometimes block localStorage entirely
-        // (hospital desktops often do). We try localStorage first because it is
-        // synchronous; if it is unavailable we transparently fall back to
-        // IndexedDB (loaded into memory at startup) so preferences, the backlog
-        // and the "Other" hint keep working across sessions. If neither works
-        // we degrade to in-memory (session-only) storage without crashing.
         const STORAGE_DB_NAME = 'haemcount.kv';
         const STORAGE_DB_VERSION = 1;
         const STORAGE_STORE = 'kv';
+        const FILE_HANDLE_KEY = 'sessionFileHandle';
 
         const appStorage = (function () {
             let mode = 'memory';
@@ -2238,11 +1137,10 @@ See the LICENSE file for details.
                 try {
                     const k = '__haemcount_probe__';
                     localStorage.setItem(k, '1');
+                    if (localStorage.getItem(k) !== '1') return false;
                     localStorage.removeItem(k);
                     return true;
-                } catch (e) {
-                    return false;
-                }
+                } catch (e) { return false; }
             }
 
             function openDB() {
@@ -2252,9 +1150,7 @@ See the LICENSE file for details.
                     const req = indexedDB.open(STORAGE_DB_NAME, STORAGE_DB_VERSION);
                     req.onupgradeneeded = () => {
                         const db = req.result;
-                        if (!db.objectStoreNames.contains(STORAGE_STORE)) {
-                            db.createObjectStore(STORAGE_STORE);
-                        }
+                        if (!db.objectStoreNames.contains(STORAGE_STORE)) db.createObjectStore(STORAGE_STORE);
                     };
                     req.onsuccess = () => resolve(req.result);
                     req.onerror = () => reject(req.error || new Error('IndexedDB open failed'));
@@ -2273,6 +1169,15 @@ See the LICENSE file for details.
                         if (cur) { out[cur.key] = cur.value; cur.continue(); }
                         else resolve(out);
                     };
+                    req.onerror = () => reject(req.error);
+                }));
+            }
+
+            function idbGet(key) {
+                return openDB().then(db => new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORAGE_STORE, 'readonly');
+                    const req = tx.objectStore(STORAGE_STORE).get(key);
+                    req.onsuccess = () => resolve(req.result);
                     req.onerror = () => reject(req.error);
                 }));
             }
@@ -2297,14 +1202,23 @@ See the LICENSE file for details.
                 }));
             }
 
+            async function testIDB() {
+                const probeKey = '__haemcount_idb_probe__';
+                await idbWrite(probeKey, 'ok');
+                const check = await idbGet(probeKey);
+                await idbDelete(probeKey);
+                return check === 'ok';
+            }
+
             async function init() {
-                if (testLocalStorage()) {
-                    mode = 'local';
-                    return mode;
-                }
+                if (testLocalStorage()) { mode = 'local'; return mode; }
                 try {
+                    const ok = await testIDB();
+                    if (!ok) throw new Error('IndexedDB write test failed');
                     const all = await idbReadAll();
-                    Object.keys(all).forEach(k => { cache[k] = all[k]; });
+                    Object.keys(all).forEach(k => {
+                        if (k !== FILE_HANDLE_KEY) cache[k] = all[k];
+                    });
                     mode = 'idb';
                     return mode;
                 } catch (e) {
@@ -2315,16 +1229,14 @@ See the LICENSE file for details.
             }
 
             function getItem(key) {
-                if (mode === 'local') {
-                    try { return localStorage.getItem(key); } catch (e) { return null; }
-                }
+                if (mode === 'local') { try { return localStorage.getItem(key); } catch (e) { return null; } }
                 return Object.prototype.hasOwnProperty.call(cache, key) ? cache[key] : null;
             }
 
             function setItem(key, value) {
                 value = String(value);
                 if (mode === 'local') {
-                    try { localStorage.setItem(key, value); } catch (e) { /* quota etc. */ }
+                    try { localStorage.setItem(key, value); } catch (e) { }
                     return;
                 }
                 cache[key] = value;
@@ -2332,42 +1244,52 @@ See the LICENSE file for details.
             }
 
             function removeItem(key) {
-                if (mode === 'local') {
-                    try { localStorage.removeItem(key); } catch (e) { }
-                    return;
-                }
+                if (mode === 'local') { try { localStorage.removeItem(key); } catch (e) { } return; }
                 delete cache[key];
                 if (mode === 'idb') idbDelete(key).catch(() => { });
             }
 
+            // File-handle helpers use raw IndexedDB because handles cannot be
+            // stored in localStorage (they are not serialisable) and they
+            // require the structured-clone algorithm that IDB uses.
+            async function putHandle(key, handle) {
+                try { await idbWrite(key, handle); return true; }
+                catch (e) { console.warn('Could not persist file handle', e); return false; }
+            }
+
+            async function getHandle(key) {
+                try { return await idbGet(key); }
+                catch (e) { return null; }
+            }
+
+            async function removeHandle(key) {
+                try { await idbDelete(key); } catch (e) { }
+            }
+
+            // Feature detection: File System Access API present?
+            const hasFileSystemAccess = typeof window !== 'undefined'
+                && typeof window.showSaveFilePicker === 'function';
+
             return {
-                init: init,
-                getItem: getItem,
-                setItem: setItem,
-                removeItem: removeItem,
+                init, getItem, setItem, removeItem,
+                putHandle, getHandle, removeHandle,
+                hasFileSystemAccess,
                 get mode() { return mode; }
             };
         })();
 
-        // ---------- Preferences ----------
         const PREFS_KEY = 'haemcount.prefs.v1';
 
         function savePrefs() {
             try {
                 appStorage.setItem(PREFS_KEY, JSON.stringify({
-                    volume: globalVolume,
-                    theme: currentTheme,
-                    keybinds: keyMap,
-                    actionKeys: actionKeys,
-                    warnBeforeReset: warnBeforeReset,
-                    pauseOnBlur: pauseOnBlur,
-                    chartType: chartType,
-                    layoutMode: layoutMode,
-                    mobileEntry: mobileEntry
+                    volume: globalVolume, theme: currentTheme, keybinds: keyMap,
+                    actionKeys: actionKeys, warnBeforeReset: warnBeforeReset,
+                    pauseOnBlur: pauseOnBlur, chartType: chartType,
+                    layoutMode: layoutMode, mobileEntry: mobileEntry
                 }));
-            } catch (e) {
-                console.warn('Could not save preferences', e);
-            }
+            } catch (e) { console.warn('Could not save preferences', e); }
+            scheduleAutoSave();
         }
 
         function loadPrefs() {
@@ -2375,14 +1297,11 @@ See the LICENSE file for details.
             try {
                 const raw = appStorage.getItem(PREFS_KEY);
                 prefs = raw ? JSON.parse(raw) : null;
-            } catch (e) {
-                console.warn('Could not read preferences', e);
-            }
+            } catch (e) { console.warn('Could not read preferences', e); }
             if (!prefs || typeof prefs !== 'object') prefs = {};
 
             const v = parseFloat(prefs.volume);
             globalVolume = isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5;
-
             currentTheme = Object.prototype.hasOwnProperty.call(THEMES, prefs.theme) ? prefs.theme : 'light';
 
             keyMap = Object.assign({}, DEFAULT_KEY_MAP);
@@ -2397,7 +1316,6 @@ See the LICENSE file for details.
                 });
                 keyMap = cleaned;
             }
-
             actionKeys = Object.assign({}, DEFAULT_ACTION_KEYS);
             if (prefs.actionKeys && typeof prefs.actionKeys === 'object') {
                 Object.keys(DEFAULT_ACTION_KEYS).forEach(k => {
@@ -2405,22 +1323,16 @@ See the LICENSE file for details.
                     if (typeof val === 'string' && (val === '' || val.length === 1)) actionKeys[k] = val;
                 });
             }
-
             warnBeforeReset = prefs.warnBeforeReset !== false;
             pauseOnBlur = !!prefs.pauseOnBlur;
             chartType = (prefs.chartType === 'pie') ? 'pie' : 'bar';
-
-            layoutMode = (prefs.layoutMode === 'mobile' || prefs.layoutMode === 'desktop')
-                ? prefs.layoutMode
-                : 'auto';
-
+            layoutMode = (prefs.layoutMode === 'mobile' || prefs.layoutMode === 'desktop') ? prefs.layoutMode : 'auto';
             mobileEntry = (prefs.mobileEntry === 'list') ? 'list' : 'numpad';
         }
 
         const SHIFT_MAP = {
             '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
-            '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
-            '>': '.'
+            '^': '6', '&': '7', '*': '8', '(': '9', ')': '0', '>': '.'
         };
 
         // ---------- Custom confirm dialog ----------
@@ -2429,11 +1341,7 @@ See the LICENSE file for details.
         function showConfirm(message, options) {
             options = options || {};
             return new Promise(resolve => {
-                if (confirmResolve) {
-                    const prev = confirmResolve;
-                    confirmResolve = null;
-                    prev(false);
-                }
+                if (confirmResolve) { const prev = confirmResolve; confirmResolve = null; prev(false); }
                 confirmResolve = resolve;
                 document.getElementById('confirmTitle').textContent = options.title || 'Confirm';
                 document.getElementById('confirmMessage').textContent = message;
@@ -2448,11 +1356,7 @@ See the LICENSE file for details.
 
         function closeConfirmModal(result) {
             document.getElementById('confirmModal').classList.remove('open');
-            if (confirmResolve) {
-                const r = confirmResolve;
-                confirmResolve = null;
-                r(result);
-            }
+            if (confirmResolve) { const r = confirmResolve; confirmResolve = null; r(result); }
         }
 
         document.getElementById('confirmOkBtn').addEventListener('click', () => closeConfirmModal(true));
@@ -2470,17 +1374,12 @@ See the LICENSE file for details.
                 if (!raw) return [];
                 const arr = JSON.parse(raw);
                 return Array.isArray(arr) ? arr : [];
-            } catch (e) {
-                console.warn('Could not read backlog', e);
-                return [];
-            }
+            } catch (e) { console.warn('Could not read backlog', e); return []; }
         }
 
         function writeBacklog(arr) {
-            try {
-                appStorage.setItem(BACKLOG_KEY, JSON.stringify(arr));
-                return true;
-            } catch (e) {
+            try { appStorage.setItem(BACKLOG_KEY, JSON.stringify(arr)); scheduleAutoSave(); return true; }
+            catch (e) {
                 console.warn('Could not write backlog', e);
                 showToast('Could not save backlog');
                 return false;
@@ -2548,7 +1447,6 @@ See the LICENSE file for details.
             if (!ok) return;
 
             ALL_CELLS.forEach(c => { counts[c.key] = (entry.counts && entry.counts[c.key]) || 0; });
-
             mode = (entry.mode === 'bone') ? 'bone' : 'peripheral';
             otherLabelValue = entry.otherLabel || 'other';
 
@@ -2594,12 +1492,10 @@ See the LICENSE file for details.
             const container = document.getElementById('backlogList');
             if (!container) return;
             const backlog = readBacklog();
-
             if (backlog.length === 0) {
                 container.innerHTML = '<div class="backlog-empty">No saved entries yet.</div>';
                 return;
             }
-
             container.innerHTML = '';
             backlog.forEach(entry => {
                 const total = computeEntryTotal(entry);
@@ -2640,7 +1536,462 @@ See the LICENSE file for details.
             });
         }
 
-        // ---------- Audio (mobile-friendly) ----------
+        // ---------- Session snapshot helpers ----------
+        function collectFullSession() {
+            return {
+                app: 'HaemCount',
+                version: 1,
+                savedAt: new Date().toISOString(),
+                prefs: {
+                    volume: globalVolume, theme: currentTheme, keybinds: keyMap,
+                    actionKeys: actionKeys, warnBeforeReset: warnBeforeReset,
+                    pauseOnBlur: pauseOnBlur, chartType: chartType,
+                    layoutMode: layoutMode, mobileEntry: mobileEntry
+                },
+                backlog: readBacklog(),
+                current: {
+                    counts: Object.assign({}, counts),
+                    mode: mode,
+                    otherLabel: otherLabelValue,
+                    params: {
+                        hgb: document.getElementById('hgb').value,
+                        mcv: document.getElementById('mcv').value,
+                        wbc: document.getElementById('wbc').value,
+                        plt: document.getElementById('plt').value
+                    }
+                }
+            };
+        }
+
+        function applyFullSession(data, options) {
+            options = options || {};
+            if (!data || typeof data !== 'object') throw new Error('Invalid session data');
+
+            if (data.prefs && typeof data.prefs === 'object') {
+                const p = data.prefs;
+                if (typeof p.volume === 'number') globalVolume = Math.min(1, Math.max(0, p.volume));
+                if (THEMES[p.theme]) currentTheme = p.theme;
+                if (p.keybinds && typeof p.keybinds === 'object') {
+                    const validCells = ALL_CELLS.map(c => c.key);
+                    const cleaned = {};
+                    Object.keys(p.keybinds).forEach(k => {
+                        if (k.length === 1 && validCells.indexOf(p.keybinds[k]) !== -1) {
+                            cleaned[k] = p.keybinds[k];
+                        }
+                    });
+                    keyMap = cleaned;
+                }
+                if (p.actionKeys && typeof p.actionKeys === 'object') {
+                    actionKeys = Object.assign({}, DEFAULT_ACTION_KEYS);
+                    Object.keys(DEFAULT_ACTION_KEYS).forEach(k => {
+                        const v = p.actionKeys[k];
+                        if (typeof v === 'string' && (v === '' || v.length === 1)) actionKeys[k] = v;
+                    });
+                }
+                if (typeof p.warnBeforeReset === 'boolean') warnBeforeReset = p.warnBeforeReset;
+                if (typeof p.pauseOnBlur === 'boolean') pauseOnBlur = p.pauseOnBlur;
+                if (p.chartType === 'pie' || p.chartType === 'bar') chartType = p.chartType;
+                if (p.layoutMode === 'mobile' || p.layoutMode === 'desktop' || p.layoutMode === 'auto') layoutMode = p.layoutMode;
+                if (p.mobileEntry === 'numpad' || p.mobileEntry === 'list') mobileEntry = p.mobileEntry;
+            }
+
+            if (Array.isArray(data.backlog)) writeBacklog(data.backlog);
+
+            if (data.current && typeof data.current === 'object') {
+                const c = data.current;
+                ALL_CELLS.forEach(cell => {
+                    const v = c.counts && c.counts[cell.key];
+                    counts[cell.key] = Number.isFinite(v) ? v : 0;
+                });
+                mode = (c.mode === 'bone') ? 'bone' : 'peripheral';
+                otherLabelValue = (typeof c.otherLabel === 'string' && c.otherLabel)
+                    ? c.otherLabel.slice(0, 32) : 'other';
+                const params = c.params || {};
+                ['hgb', 'mcv', 'wbc', 'plt'].forEach(k => {
+                    if (params[k] !== undefined && params[k] !== null && params[k] !== '') {
+                        const el = document.getElementById(k);
+                        if (el) el.value = params[k];
+                    }
+                });
+            }
+
+            // Write preferences back to local storage, then re-render.
+            // We deliberately bypass savePrefs() so we don't schedule a
+            // redundant auto-save while applying an incoming file.
+            try {
+                appStorage.setItem(PREFS_KEY, JSON.stringify({
+                    volume: globalVolume, theme: currentTheme, keybinds: keyMap,
+                    actionKeys: actionKeys, warnBeforeReset: warnBeforeReset,
+                    pauseOnBlur: pauseOnBlur, chartType: chartType,
+                    layoutMode: layoutMode, mobileEntry: mobileEntry
+                }));
+            } catch (e) { }
+
+            applyLayoutMode(true);
+            applyTheme(currentTheme);
+            renderDiffGrid();
+            updateAll();
+
+            if (!options.silent) refreshAutoSaveUI();
+        }
+
+        // ---------- Auto-save to a chosen file ----------
+        // We keep a FileSystemFileHandle in IndexedDB. If IndexedDB also gets
+        // wiped on your machine, the handle cannot be remembered across
+        // sessions, but the auto-save still works perfectly within a session
+        // (and the file itself lives outside the browser, so it survives).
+        let currentFileHandle = null;
+        let currentFileName = '';
+        let autoSaveTimer = null;
+        let autoSaveSuppressed = false;
+
+        function scheduleAutoSave() {
+            if (autoSaveSuppressed) return;
+            if (!currentFileHandle) return;
+            if (autoSaveTimer) clearTimeout(autoSaveTimer);
+            autoSaveTimer = setTimeout(() => { autoSaveTimer = null; flushAutoSave(); }, 900);
+        }
+
+        async function flushAutoSave() {
+            if (!currentFileHandle) return false;
+            try {
+                const perm = await currentFileHandle.queryPermission({ mode: 'readwrite' });
+                if (perm !== 'granted') return false;
+                const data = collectFullSession();
+                const writable = await currentFileHandle.createWritable();
+                await writable.write(JSON.stringify(data, null, 2));
+                await writable.close();
+                updateAutoSaveStateUI('ok');
+                return true;
+            } catch (e) {
+                console.warn('Auto-save failed', e);
+                updateAutoSaveStateUI('error');
+                return false;
+            }
+        }
+
+        async function readSessionFromHandle(handle) {
+            const file = await handle.getFile();
+            const text = await file.text();
+            if (!text.trim()) return null;
+            return JSON.parse(text);
+        }
+
+        async function chooseSessionFile() {
+            if (!appStorage.hasFileSystemAccess) {
+                await showConfirm(
+                    'This browser does not support automatic file saving. ' +
+                    'Use "Download session file" and "Load session from file" in the Session menu instead.',
+                    { title: 'Not supported', okText: 'OK', hideCancel: true }
+                );
+                return;
+            }
+            try {
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: 'haemcount-session.json',
+                    types: [{
+                        description: 'HaemCount Session',
+                        accept: { 'application/json': ['.json'] }
+                    }]
+                });
+                currentFileHandle = handle;
+                currentFileName = handle.name || 'session file';
+                await appStorage.putHandle(FILE_HANDLE_KEY, handle);
+
+                // Write current state immediately so the file is not empty.
+                await flushAutoSave();
+
+                refreshAutoSaveUI();
+                hideResumeBar();
+                updateStorageDiagnostics();
+                showToast('Auto-save enabled — file will update automatically');
+            } catch (e) {
+                if (e && e.name === 'AbortError') return; // user cancelled
+                console.warn('Choose session file failed', e);
+                showToast('Could not set up auto-save');
+            }
+        }
+
+        async function forgetSessionFile() {
+            const ok = await showConfirm(
+                'Stop auto-saving to this file?\n\nThe file itself is not deleted — you can still load it manually.',
+                { title: 'Disconnect Session File', okText: 'Disconnect' }
+            );
+            if (!ok) return;
+            currentFileHandle = null;
+            currentFileName = '';
+            await appStorage.removeHandle(FILE_HANDLE_KEY);
+            refreshAutoSaveUI();
+            updateStorageDiagnostics();
+            showToast('Auto-save disconnected');
+        }
+
+        // Restore the persisted handle on startup, and either load silently
+        // (permission still granted) or show the one-click resume bar.
+        async function tryRestoreSessionFileHandle() {
+            if (!appStorage.hasFileSystemAccess) return;
+            let handle;
+            try { handle = await appStorage.getHandle(FILE_HANDLE_KEY); }
+            catch (e) { return; }
+            if (!handle) return;
+
+            currentFileHandle = handle;
+            currentFileName = handle.name || 'session file';
+
+            let perm = 'prompt';
+            try { perm = await handle.queryPermission({ mode: 'readwrite' }); }
+            catch (e) { perm = 'prompt'; }
+
+            if (perm === 'granted') {
+                // Silent auto-load — we were granted access last time.
+                try {
+                    const data = await readSessionFromHandle(handle);
+                    if (data) {
+                        autoSaveSuppressed = true;
+                        applyFullSession(data, { silent: true });
+                        autoSaveSuppressed = false;
+                        showToast('Session restored from file');
+                    }
+                } catch (e) {
+                    console.warn('Auto-load from file failed', e);
+                    showResumeBar('Could not read the saved session file. Click to try again.');
+                }
+                refreshAutoSaveUI();
+            } else if (perm === 'prompt') {
+                // Needs one click to re-grant permission.
+                showResumeBar();
+                refreshAutoSaveUI();
+            } else {
+                // Denied — drop the handle.
+                await appStorage.removeHandle(FILE_HANDLE_KEY);
+                currentFileHandle = null;
+                currentFileName = '';
+                refreshAutoSaveUI();
+            }
+        }
+
+        async function resumeSessionFromHandle() {
+            if (!currentFileHandle) { hideResumeBar(); return; }
+            try {
+                const granted = await currentFileHandle.requestPermission({ mode: 'readwrite' });
+                if (granted !== 'granted') {
+                    showToast('Permission was denied — auto-save is off');
+                    await appStorage.removeHandle(FILE_HANDLE_KEY);
+                    currentFileHandle = null;
+                    currentFileName = '';
+                    hideResumeBar();
+                    refreshAutoSaveUI();
+                    return;
+                }
+                const data = await readSessionFromHandle(currentFileHandle);
+                if (data) {
+                    autoSaveSuppressed = true;
+                    applyFullSession(data, { silent: true });
+                    autoSaveSuppressed = false;
+                    showToast('Session restored from file');
+                } else {
+                    showToast('Session file is empty — starting fresh');
+                    await flushAutoSave();
+                }
+                hideResumeBar();
+                refreshAutoSaveUI();
+                updateStorageDiagnostics();
+            } catch (e) {
+                console.warn('Resume session failed', e);
+                showToast('Could not read the session file');
+            }
+        }
+
+        function dismissResumeBar() {
+            hideResumeBar();
+        }
+
+        function showResumeBar(customMessage) {
+            const bar = document.getElementById('resumeBar');
+            const nameEl = document.getElementById('resumeFileName');
+            if (!bar) return;
+            if (nameEl) nameEl.textContent = currentFileName || 'the session file';
+            if (customMessage) {
+                const grow = bar.querySelector('.grow');
+                if (grow) grow.textContent = customMessage;
+            }
+            bar.classList.add('show');
+        }
+
+        function hideResumeBar() {
+            const bar = document.getElementById('resumeBar');
+            if (bar) bar.classList.remove('show');
+        }
+
+        function refreshAutoSaveUI() {
+            const stateEl = document.getElementById('autoSaveState');
+            const nameEl = document.getElementById('autoSaveFileName');
+            const forgetBtn = document.getElementById('autoSaveForgetBtn');
+            const chooseBtn = document.getElementById('autoSaveChooseBtn');
+            if (!stateEl) return;
+
+            if (!appStorage.hasFileSystemAccess) {
+                stateEl.className = 'auto-save-state off';
+                if (nameEl) nameEl.textContent = 'Not supported in this browser';
+                if (forgetBtn) forgetBtn.style.display = 'none';
+                if (chooseBtn) chooseBtn.disabled = true;
+                return;
+            }
+
+            if (chooseBtn) chooseBtn.disabled = false;
+
+            if (!currentFileHandle) {
+                stateEl.className = 'auto-save-state off';
+                if (nameEl) nameEl.textContent = 'Auto-save is off';
+                if (forgetBtn) forgetBtn.style.display = 'none';
+                return;
+            }
+
+            // Handle exists — check permission without prompting.
+            currentFileHandle.queryPermission({ mode: 'readwrite' }).then(perm => {
+                if (perm === 'granted') {
+                    stateEl.className = 'auto-save-state';
+                    if (nameEl) nameEl.textContent = currentFileName || 'session file';
+                } else {
+                    stateEl.className = 'auto-save-state needs-permission';
+                    if (nameEl) nameEl.textContent = (currentFileName || 'session file') + ' — needs permission';
+                }
+                if (forgetBtn) forgetBtn.style.display = '';
+            }).catch(() => {
+                stateEl.className = 'auto-save-state off';
+                if (nameEl) nameEl.textContent = 'Auto-save is off';
+                if (forgetBtn) forgetBtn.style.display = 'none';
+            });
+        }
+
+        function updateAutoSaveStateUI(kind) {
+            const stateEl = document.getElementById('autoSaveState');
+            if (!stateEl) return;
+            if (kind === 'error') {
+                stateEl.className = 'auto-save-state needs-permission';
+                const nameEl = document.getElementById('autoSaveFileName');
+                if (nameEl) nameEl.textContent = (currentFileName || 'session file') + ' — save failed';
+            }
+        }
+
+        // ---------- Manual download / upload ----------
+        function saveSessionToFile() {
+            try {
+                const data = collectFullSession();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                const d = new Date();
+                const pad = n => String(n).padStart(2, '0');
+                const fname = `haemcount-session-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}.json`;
+                a.href = url;
+                a.download = fname;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 2000);
+                showToast('Session downloaded');
+            } catch (e) {
+                console.error('Save session failed', e);
+                showToast('Could not save session');
+            }
+        }
+
+        async function handleSessionFileInput(input) {
+            const file = input.files && input.files[0];
+            input.value = '';
+            if (!file) return;
+            try {
+                const text = await file.text();
+                const data = JSON.parse(text);
+                const ok = await showConfirm(
+                    'Load this session file?\n\nThis will replace your current counts, parameters, backlog, and preferences.',
+                    { title: 'Load Session', okText: 'Load' }
+                );
+                if (!ok) return;
+                applyFullSession(data);
+                closeModal('sessionModal');
+                showToast('Session loaded');
+                scheduleAutoSave();
+            } catch (e) {
+                console.error('Load session failed', e);
+                await showConfirm(
+                    'Could not read that file. Make sure it is a HaemCount session (.json) file.',
+                    { title: 'Load Failed', okText: 'OK', hideCancel: true }
+                );
+            }
+        }
+
+        // ---------- Diagnostics / warning banners ----------
+        function openSession() {
+            updateStorageDiagnostics();
+            refreshAutoSaveUI();
+            openModal('sessionModal');
+        }
+
+        function updateStorageDiagnostics() {
+            const modeEl = document.getElementById('sessionStorageMode');
+            const detailEl = document.getElementById('sessionStorageDetail');
+            const box = document.getElementById('sessionStatusBox');
+            const statusEl = document.getElementById('storageModeIndicator');
+            const menuBtn = document.getElementById('sessionMenuBtn');
+            const warning = document.getElementById('storageWarning');
+            const warningText = document.getElementById('storageWarningText');
+            if (!modeEl || !box) return;
+
+            const m = appStorage.mode;
+            const fileAuto = !!currentFileHandle;
+            let label, detail, cls;
+            if (m === 'local' || m === 'idb') {
+                label = 'Automatic storage: ' + (m === 'local' ? 'LocalStorage' : 'IndexedDB') + ' ✓';
+                detail = 'Your data is saved automatically and will still be here when you reopen this app.';
+                cls = 'ok';
+            } else if (fileAuto) {
+                label = 'Auto-save to file ✓';
+                detail = 'The browser blocks its own storage, but your session is saved to the file you picked '
+                    + 'and will be loaded automatically next time (one click may be needed to re-grant access).';
+                cls = 'ok';
+            } else {
+                label = 'Session-only storage ⚠ (does NOT persist)';
+                detail = 'This browser is blocking all persistent storage. Your counts would be lost when you close '
+                    + 'the window. Click "Enable auto-save to file" above to save your work to a file you can reload '
+                    + 'next time.';
+                cls = 'warn';
+            }
+            modeEl.textContent = label;
+            detailEl.textContent = detail;
+            box.className = 'session-status-box ' + cls;
+
+            let short;
+            if (m === 'local') short = 'Local';
+            else if (m === 'idb') short = 'IndexedDB';
+            else if (fileAuto) short = 'File';
+            else short = 'Session only ⚠';
+            if (statusEl) {
+                statusEl.textContent = short;
+                statusEl.className = (m === 'memory' && !fileAuto) ? 'warn' : 'ok';
+            }
+           if (menuBtn) {
+    const urgent = (m === 'memory' && !fileAuto);
+    menuBtn.classList.toggle('session-highlight', urgent);
+    menuBtn.textContent = urgent ? 'Save/Load ⚠' : 'Save/Load';
+}
+            if (warning) {
+                const showWarning = (m === 'memory' && !fileAuto);
+                warning.classList.toggle('show', showWarning);
+                if (warningText && showWarning) {
+                    if (appStorage.hasFileSystemAccess) {
+                        warningText.textContent = 'This browser is blocking persistent storage. Click "Enable auto-save to file" '
+                            + 'to keep your counts across restarts.';
+                    } else {
+                        warningText.textContent = 'This browser is blocking persistent storage and does not support automatic file saving. '
+                            + 'Use Session… to download / load a file manually.';
+                    }
+                }
+            }
+        }
+
+        // ---------- Audio ----------
         let audioUnlocked = false;
         let audioPrimed = false;
         let silentBufferDone = false;
@@ -2654,10 +2005,6 @@ See the LICENSE file for details.
                 try { audioCtx = new AC(); }
                 catch (e2) { console.warn('Web Audio not supported', e2); return null; }
             }
-            // Re-run the silent-buffer unlock whenever the context actually
-            // reaches 'running'. On iOS the very first unlock attempt often
-            // lands while the context is still suspended; a single one-shot
-            // attempt is not enough, so we keep trying.
             if (audioCtx.addEventListener) {
                 audioCtx.addEventListener('statechange', () => {
                     if (audioCtx.state === 'running') primeSilentBuffer();
@@ -2666,11 +2013,9 @@ See the LICENSE file for details.
             return audioCtx;
         }
 
-        // Must be called synchronously from inside a real user gesture.
         function unlockAudio() {
             const ctx = getAudioCtx();
             if (!ctx) return null;
-
             if (ctx.state === 'suspended' && typeof ctx.resume === 'function') {
                 const p = ctx.resume();
                 if (p && typeof p.catch === 'function') p.catch(() => { });
@@ -2679,8 +2024,6 @@ See the LICENSE file for details.
             return ctx;
         }
 
-        // iOS refuses to output anything until a buffer has been played from
-        // a gesture. A one-sample silent buffer does the trick.
         function primeSilentBuffer() {
             if (silentBufferDone || !audioCtx) return;
             try {
@@ -2692,17 +2035,15 @@ See the LICENSE file for details.
                 else if (src.noteOn) src.noteOn(0);
                 silentBufferDone = true;
                 audioUnlocked = true;
-            } catch (e) { /* try again on the next gesture */ }
+            } catch (e) { }
         }
 
-        // Backwards-compatible alias used throughout the rest of the app.
         function initAudio() { return unlockAudio(); }
 
         function playBeep(freq, duration, vol) {
             if (vol <= 0) return;
             const ctx = getAudioCtx();
             if (!ctx) return;
-
             const fire = () => {
                 try {
                     const t0 = ctx.currentTime;
@@ -2710,7 +2051,6 @@ See the LICENSE file for details.
                     const gain = ctx.createGain();
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(freq, t0);
-                    // Quick fade in/out – avoids clicks and keeps the peak predictable.
                     gain.gain.setValueAtTime(0.0001, t0);
                     gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.008);
                     gain.gain.setValueAtTime(vol, Math.max(t0 + 0.008, t0 + duration * 0.6));
@@ -2721,11 +2061,7 @@ See the LICENSE file for details.
                     osc.stop(t0 + duration + 0.03);
                 } catch (e) { console.warn('Audio playback failed', e); }
             };
-
             if (ctx.state === 'running') { fire(); return; }
-
-            // Still suspended (common on iOS) – resume, then schedule the tone
-            // once the context is genuinely running.
             const p = ctx.resume();
             if (p && typeof p.then === 'function') {
                 p.then(() => { if (ctx.state === 'running') fire(); }).catch(() => { });
@@ -2734,13 +2070,11 @@ See the LICENSE file for details.
 
         function playSound(type) {
             if (globalVolume <= 0) return;
-
             const fallback = () => playBeep(
                 type === 'normal' ? 800 : 1200,
                 type === 'normal' ? 0.05 : 0.35,
                 globalVolume
             );
-
             const custom = customSounds[type];
             if (custom && custom.url) {
                 try {
@@ -2749,36 +2083,22 @@ See the LICENSE file for details.
                     const p = audio.play();
                     if (p && typeof p.catch === 'function') p.catch(() => fallback());
                     return;
-                } catch (e) {
-                    console.warn('Custom sound playback failed', e);
-                }
+                } catch (e) { console.warn('Custom sound playback failed', e); }
             }
             fallback();
         }
 
-        // Unlock the audio hardware on the first interaction, whatever it is.
-        // Capture phase so we run before any other handler. The listeners stay
-        // in place until the context is genuinely running.
         (function primeAudioOnFirstGesture() {
             const events = ['pointerdown', 'touchstart', 'touchend', 'mousedown', 'click', 'keydown'];
             const opts = { capture: true, passive: true };
-
             const prime = () => {
                 const ctx = unlockAudio();
-
-                if (ctx && ctx.state === 'running' && audioUnlocked) {
-                    audioPrimed = true;
-                }
-
-                if (audioPrimed) {
-                    events.forEach(evt => document.removeEventListener(evt, prime, opts));
-                }
+                if (ctx && ctx.state === 'running' && audioUnlocked) audioPrimed = true;
+                if (audioPrimed) events.forEach(evt => document.removeEventListener(evt, prime, opts));
             };
-
             events.forEach(evt => document.addEventListener(evt, prime, opts));
         })();
 
-        // Coming back from the background can leave the context suspended.
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) return;
             if (audioCtx && audioCtx.state === 'suspended') {
@@ -2788,14 +2108,10 @@ See the LICENSE file for details.
         });
 
         // ---------- Custom sound persistence ----------
-        // Sound blobs go into their own IndexedDB store (efficient for large
-        // files). If that fails, we fall back to appStorage (which may itself
-        // be localStorage, appStorage's IndexedDB, or in-memory).
         const SOUND_DB_NAME = 'haemcount.sounds';
         const SOUND_STORE = 'sounds';
         const SOUND_LS_PREFIX = 'haemcount.sound.';
         const SOUND_TYPES = ['normal', 'century'];
-
         let soundDBPromise = null;
 
         function openSoundDB() {
@@ -2838,9 +2154,7 @@ See the LICENSE file for details.
                 await soundStore('readwrite', store => store.put(file, type));
                 appStorage.removeItem(SOUND_LS_PREFIX + type);
                 return;
-            } catch (e) {
-                console.warn('IndexedDB unavailable for sounds, using fallback storage', e);
-            }
+            } catch (e) { console.warn('IndexedDB unavailable for sounds, using fallback', e); }
             const dataUrl = await readFileAsDataURL(file);
             appStorage.setItem(SOUND_LS_PREFIX + type, dataUrl);
         }
@@ -2852,9 +2166,7 @@ See the LICENSE file for details.
 
         function setCustomSound(type, url, name) {
             const prev = customSounds[type];
-            if (prev && prev.url && prev.url.indexOf('blob:') === 0) {
-                URL.revokeObjectURL(prev.url);
-            }
+            if (prev && prev.url && prev.url.indexOf('blob:') === 0) URL.revokeObjectURL(prev.url);
             customSounds[type] = url ? { url: url, name: name || 'Custom sound' } : null;
             updateSoundStatus(type);
         }
@@ -2876,24 +2188,17 @@ See the LICENSE file for details.
 
         async function restoreSounds() {
             for (const type of SOUND_TYPES) {
-                let url = null;
-                let name = '';
-
+                let url = null, name = '';
                 try {
                     const blob = await soundStore('readonly', store => store.get(type));
-                    if (blob) {
-                        url = URL.createObjectURL(blob);
-                        name = blob.name || 'Custom sound';
-                    }
+                    if (blob) { url = URL.createObjectURL(blob); name = blob.name || 'Custom sound'; }
                 } catch (e) { }
-
                 if (!url) {
                     try {
                         const dataUrl = appStorage.getItem(SOUND_LS_PREFIX + type);
                         if (dataUrl) { url = dataUrl; name = 'Custom sound'; }
                     } catch (e) { }
                 }
-
                 if (url) setCustomSound(type, url, name);
                 else updateSoundStatus(type);
             }
@@ -2902,9 +2207,7 @@ See the LICENSE file for details.
         async function loadSound(input, type) {
             const file = input.files && input.files[0];
             if (!file) return;
-
             setCustomSound(type, URL.createObjectURL(file), file.name);
-
             try {
                 await persistSound(type, file);
                 showToast(`Custom ${type} sound saved`);
@@ -2923,7 +2226,7 @@ See the LICENSE file for details.
             showToast(`Reset ${type} sound`);
         }
 
-        // ---------- Pause on window blur ----------
+        // ---------- Pause on blur ----------
         let paused = false;
         let pauseOnBlur = false;
         let nativeDialogOpen = false;
@@ -2949,12 +2252,8 @@ See the LICENSE file for details.
         function withNativeDialog(fn) {
             nativeDialogOpen = true;
             let result;
-            try {
-                result = fn();
-            } finally {
-                nativeDialogClosedAt = Date.now();
-                nativeDialogOpen = false;
-            }
+            try { result = fn(); }
+            finally { nativeDialogClosedAt = Date.now(); nativeDialogOpen = false; }
             return result;
         }
 
@@ -2970,10 +2269,7 @@ See the LICENSE file for details.
             }, 150);
         });
 
-        window.addEventListener('focus', () => {
-            if (paused) resumeCounting();
-        });
-
+        window.addEventListener('focus', () => { if (paused) resumeCounting(); });
         document.addEventListener('visibilitychange', () => {
             if (!pauseOnBlur) return;
             if (document.hidden) pauseCounting();
@@ -2981,32 +2277,38 @@ See the LICENSE file for details.
 
         // ---------- Unsaved-work guard ----------
         let bypassUnloadWarning = false;
-
         function hasCountedCells() {
             return ALL_CELLS.some(c => (counts[c.key] || 0) > 0);
         }
-
         window.addEventListener('beforeunload', (e) => {
+            // Best-effort flush of the session file before leaving.
+            if (currentFileHandle) {
+                try { flushAutoSave(); } catch (err) { }
+            }
             if (bypassUnloadWarning) return;
             if (!warnBeforeReset) return;
             if (!hasCountedCells()) return;
+            // If auto-save is active, the data is already on disk — no need to nag.
+            if (currentFileHandle) return;
             e.preventDefault();
             e.returnValue = '';
             return '';
         });
 
+        // Also flush when the tab is being hidden (mobile/desktop).
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden' && currentFileHandle) {
+                try { flushAutoSave(); } catch (e) { }
+            }
+        });
+
         // ---------- First-visit hint ----------
         const HINT_KEY = 'haemcount.otherHintSeen.v1';
-
-        let hintEl = null;
-        let hintTarget = null;
-        let hintTimer = null;
+        let hintEl = null, hintTarget = null, hintTimer = null;
 
         function otherHintSeen() {
-            try { return appStorage.getItem(HINT_KEY) === '1'; }
-            catch (e) { return false; }
+            try { return appStorage.getItem(HINT_KEY) === '1'; } catch (e) { return false; }
         }
-
         function markOtherHintSeen() {
             try { appStorage.setItem(HINT_KEY, '1'); } catch (e) { }
         }
@@ -3014,7 +2316,6 @@ See the LICENSE file for details.
         function maybeShowOtherHint() {
             if (otherHintSeen()) return;
             if (!layoutVisible.diff) return;
-            // The editable label lives in the list view only; skip on mobile numpad.
             if (isMobileView() && mobileEntry === 'numpad') return;
             const target = document.querySelector('.diff-cell .editable-label');
             if (!target || !target.isConnected) return;
@@ -3024,12 +2325,7 @@ See the LICENSE file for details.
 
         function showOtherHint(target) {
             hideOtherHint(false);
-
-            // Mark as seen immediately — the hint is considered "delivered" as
-            // soon as it is shown, so closing the app before dismissal does not
-            // cause it to reappear next launch.
             markOtherHintSeen();
-
             hintTarget = target;
             target.classList.add('hint-target');
 
@@ -3040,14 +2336,9 @@ See the LICENSE file for details.
                 '<button type="button" class="hint-btn">Got it</button>' +
                 '<span class="hint-arrow"></span>';
             document.body.appendChild(hintEl);
-
-            hintEl.querySelector('.hint-btn')
-                .addEventListener('click', () => hideOtherHint(true));
-
+            hintEl.querySelector('.hint-btn').addEventListener('click', () => hideOtherHint(true));
             positionOtherHint();
-
             hintTimer = setTimeout(() => hideOtherHint(true), 12000);
-
             window.addEventListener('resize', positionOtherHint);
             window.addEventListener('scroll', positionOtherHint, true);
             document.addEventListener('click', onHintOutsideClick, true);
@@ -3056,52 +2347,41 @@ See the LICENSE file for details.
 
         function positionOtherHint() {
             if (!hintEl || !hintTarget || !hintTarget.isConnected) return;
-
             const r = hintTarget.getBoundingClientRect();
             const b = hintEl.getBoundingClientRect();
             const gap = 12;
-
             let top = r.top - b.height - gap;
             const below = top < 6;
             if (below) top = r.bottom + gap;
-
             let left = r.left + r.width / 2 - b.width / 2;
             left = Math.max(8, Math.min(left, window.innerWidth - b.width - 8));
-
             hintEl.style.top = top + 'px';
             hintEl.style.left = left + 'px';
             hintEl.classList.toggle('below', below);
-
             const arrowX = r.left + r.width / 2 - left;
             hintEl.style.setProperty('--arrow-x', arrowX + 'px');
         }
 
         function hideOtherHint(remember) {
             if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
-
             window.removeEventListener('resize', positionOtherHint);
             window.removeEventListener('scroll', positionOtherHint, true);
             document.removeEventListener('click', onHintOutsideClick, true);
             document.removeEventListener('keydown', onHintKey, true);
-
             if (hintTarget) hintTarget.classList.remove('hint-target');
             hintTarget = null;
-
             if (hintEl) { hintEl.remove(); hintEl = null; }
-
-            // The hint flag is now set on display, so nothing else to do here.
         }
 
         function onHintOutsideClick(e) {
             if (hintEl && hintEl.contains(e.target)) return;
             hideOtherHint(true);
         }
-
         function onHintKey(e) {
             if (e.key === 'Escape' || e.key === 'Enter') hideOtherHint(true);
         }
 
-        // ---------- Layout mode (view) ----------
+        // ---------- Layout mode ----------
         function deviceShortestEdge() {
             const s = window.screen || {};
             const w = Number(s.width) || window.innerWidth || 0;
@@ -3119,15 +2399,9 @@ See the LICENSE file for details.
             const mobile = isMobileView();
             if (!force && mobile === lastAppliedMobile) return;
             lastAppliedMobile = mobile;
-
             document.body.classList.toggle('layout-mobile', mobile);
             document.body.classList.toggle('layout-desktop', !mobile);
-
-            if (chart) {
-                chart.destroy();
-                chart = null;
-                setTimeout(updateHistogram, 60);
-            }
+            if (chart) { chart.destroy(); chart = null; setTimeout(updateHistogram, 60); }
         }
 
         function setLayoutMode(mode) {
@@ -3171,9 +2445,7 @@ See the LICENSE file for details.
             return '';
         }
 
-        function capitalize(s) {
-            return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-        }
+        function capitalize(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
 
         function escapeHtml(s) {
             return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
@@ -3187,20 +2459,15 @@ See the LICENSE file for details.
             if (cell.key === 'nRBC' && isBoneMarrow()) return 'Erythroid';
             return cell.dispName;
         }
-
         function getCellShortName(cell) {
             if (cell.key === 'nRBC' && isBoneMarrow()) return 'Erythroid';
             return cell.short;
         }
-
         function getCellPluralName(cell) {
             if (cell.key === 'nRBC' && isBoneMarrow()) return 'erythroid cells';
             return cell.name;
         }
-
-        function getCellColor(cell) {
-            return CELL_COLORS[cell.key] || FALLBACK_PIE_COLOR;
-        }
+        function getCellColor(cell) { return CELL_COLORS[cell.key] || FALLBACK_PIE_COLOR; }
 
         function getCellLabelHTML(cell) {
             const k = getKeyForCell(cell.key);
@@ -3211,8 +2478,7 @@ See the LICENSE file for details.
                     ` title="Click to rename this category"` +
                     ` onfocus="this.select()"` +
                     ` onkeydown="handleOtherLabelKey(event, this)"` +
-                    ` onblur="commitOtherLabel(this)">${escapeHtml(name)}</span>` +
-                    keySuffix;
+                    ` onblur="commitOtherLabel(this)">${escapeHtml(name)}</span>` + keySuffix;
             }
             return escapeHtml(getCellDisplayName(cell)) + keySuffix;
         }
@@ -3244,7 +2510,6 @@ See the LICENSE file for details.
         `;
                 grid.appendChild(div);
             });
-
             grid.appendChild(buildNumpadCell());
             grid.appendChild(buildModeCell());
             applyMobileEntry();
@@ -3268,7 +2533,6 @@ See the LICENSE file for details.
             return modeDiv;
         }
 
-        // ---------- Mobile numpad ----------
         const NUMPAD_POSITIONS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '0', '.', '+'];
 
         function contrastText(hex) {
@@ -3307,14 +2571,12 @@ See the LICENSE file for details.
             btn.addEventListener('pointercancel', () => npPressEnd(btn));
             btn.addEventListener('click', () => npPressCommit(btn, cell.key));
             btn.addEventListener('contextmenu', e => e.preventDefault());
-
             return btn;
         }
 
         function buildNumpadCell() {
             const wrap = document.createElement('div');
             wrap.className = 'numpad-cell';
-
             const head = document.createElement('div');
             head.className = 'numpad-head';
             head.innerHTML =
@@ -3327,7 +2589,6 @@ See the LICENSE file for details.
 
             const keyToCell = {};
             Object.keys(keyMap).forEach(k => { keyToCell[k] = keyMap[k]; });
-
             const placedCellKeys = new Set();
             const usedSlots = new Set();
 
@@ -3345,12 +2606,10 @@ See the LICENSE file for details.
             NUMPAD_POSITIONS.forEach(npKey => {
                 if (usedSlots.has(npKey) || remaining.length === 0) return;
                 const cell = remaining.shift();
-                const label = getKeyForCell(cell.key);
-                npGrid.appendChild(createNumpadButton(cell, label));
+                npGrid.appendChild(createNumpadButton(cell, getKeyForCell(cell.key)));
                 placedCellKeys.add(cell.key);
                 usedSlots.add(npKey);
             });
-
             remaining.forEach(cell => {
                 npGrid.appendChild(createNumpadButton(cell, getKeyForCell(cell.key)));
             });
@@ -3361,19 +2620,11 @@ See the LICENSE file for details.
 
         function npPressStart(btn, key) {
             unlockAudio();
-
             btn.dataset.lp = '0';
             clearTimeout(btn._lpTimer);
-            btn._lpTimer = setTimeout(() => {
-                btn.dataset.lp = '1';
-                change(key, -1);
-            }, 480);
+            btn._lpTimer = setTimeout(() => { btn.dataset.lp = '1'; change(key, -1); }, 480);
         }
-
-        function npPressEnd(btn) {
-            clearTimeout(btn._lpTimer);
-        }
-
+        function npPressEnd(btn) { clearTimeout(btn._lpTimer); }
         function npPressCommit(btn, key) {
             if (btn.dataset.lp === '1') { btn.dataset.lp = '0'; return; }
             change(key, 1);
@@ -3382,7 +2633,6 @@ See the LICENSE file for details.
         function updateNumpad() {
             const totalEl = document.getElementById('numpadTotal');
             if (totalEl) totalEl.textContent = `${getTotal()} cells`;
-
             ALL_CELLS.forEach(cell => {
                 const btn = document.querySelector(`.np-btn[data-cell="${cell.key}"]`);
                 if (!btn) return;
@@ -3390,7 +2640,6 @@ See the LICENSE file for details.
                 const countEl = btn.querySelector('.np-count');
                 if (countEl) countEl.textContent = n;
                 btn.classList.toggle('has-count', n > 0);
-
                 if (cell.key === 'other') {
                     const lbl = btn.querySelector('.np-name');
                     if (lbl) lbl.textContent = capitalize(otherLabelValue || 'other');
@@ -3428,10 +2677,8 @@ See the LICENSE file for details.
         }
 
         function handleOtherLabelKey(e, el) {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                el.blur();
-            } else if (e.key === 'Escape') {
+            if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+            else if (e.key === 'Escape') {
                 e.preventDefault();
                 el.textContent = capitalize(otherLabelValue || 'other');
                 el.blur();
@@ -3446,6 +2693,7 @@ See the LICENSE file for details.
             el.textContent = capitalize(val);
             updateOutput();
             updateNumpad();
+            scheduleAutoSave();
         }
 
         function getTotal() {
@@ -3498,10 +2746,10 @@ See the LICENSE file for details.
                     ratioBox.style.display = 'none';
                 }
             }
-
             updateNumpad();
             updateHistogram();
             updateOutput();
+            scheduleAutoSave();
         }
 
         function updateHistogram() {
@@ -3512,7 +2760,6 @@ See the LICENSE file for details.
             if (!canvas) return;
             const ctx = canvas.getContext('2d');
             const t = THEMES[currentTheme] || THEMES.light;
-
             if (chart) chart.destroy();
 
             if (chartType === 'pie') {
@@ -3520,7 +2767,6 @@ See the LICENSE file for details.
                 const items = pieCells
                     .map(c => ({ cell: c, value: counts[c.key] || 0, color: getCellColor(c) }))
                     .filter(it => it.value > 0);
-
                 if (items.length === 0) {
                     chart = new Chart(ctx, {
                         type: 'pie',
@@ -3529,15 +2775,12 @@ See the LICENSE file for details.
                             datasets: [{ data: [1], backgroundColor: [t.border], borderWidth: 0 }]
                         },
                         options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            animation: false,
+                            responsive: true, maintainAspectRatio: false, animation: false,
                             plugins: { legend: { display: false }, tooltip: { enabled: false } }
                         }
                     });
                     return;
                 }
-
                 chart = new Chart(ctx, {
                     type: 'pie',
                     data: {
@@ -3550,24 +2793,14 @@ See the LICENSE file for details.
                         }]
                     },
                     options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        animation: false,
+                        responsive: true, maintainAspectRatio: false, animation: false,
                         plugins: {
                             legend: {
-                                display: true,
-                                position: 'right',
-                                labels: {
-                                    font: { size: 8 },
-                                    color: t.text,
-                                    boxWidth: 8,
-                                    boxHeight: 8,
-                                    padding: 3
-                                }
+                                display: true, position: 'right',
+                                labels: { font: { size: 8 }, color: t.text, boxWidth: 8, boxHeight: 8, padding: 3 }
                             },
                             tooltip: {
-                                titleFont: { size: 10 },
-                                bodyFont: { size: 10 },
+                                titleFont: { size: 10 }, bodyFont: { size: 10 },
                                 callbacks: {
                                     title: (tooltipItems) => {
                                         if (!tooltipItems || tooltipItems.length === 0) return '';
@@ -3597,23 +2830,16 @@ See the LICENSE file for details.
                 data: {
                     labels: labels,
                     datasets: [{
-                        data: data,
-                        backgroundColor: greyBars,
-                        borderColor: '#888888',
-                        borderWidth: 1,
-                        barPercentage: 0.85,
-                        categoryPercentage: 0.9
+                        data: data, backgroundColor: greyBars, borderColor: '#888888',
+                        borderWidth: 1, barPercentage: 0.85, categoryPercentage: 0.9
                     }]
                 },
                 options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: false,
+                    responsive: true, maintainAspectRatio: false, animation: false,
                     plugins: {
                         legend: { display: false },
                         tooltip: {
-                            titleFont: { size: 10 },
-                            bodyFont: { size: 10 },
+                            titleFont: { size: 10 }, bodyFont: { size: 10 },
                             callbacks: {
                                 title: (tooltipItems) => {
                                     if (!tooltipItems || tooltipItems.length === 0) return '';
@@ -3648,7 +2874,6 @@ See the LICENSE file for details.
             const mcv = document.getElementById('mcv').value || '—';
             const wbc = document.getElementById('wbc').value || '—';
             const plt = document.getElementById('plt').value || '—';
-
             const total = getTotal();
             const isPeripheral = mode === 'peripheral';
 
@@ -3660,18 +2885,14 @@ See the LICENSE file for details.
                 lines.push('No differential count recorded.');
             } else {
                 const outputCells = HIST_ORDER.map(k => ALL_CELLS.find(c => c.key === k));
-                const mainList = isPeripheral
-                    ? outputCells.filter(c => c.key !== 'nRBC')
-                    : outputCells;
+                const mainList = isPeripheral ? outputCells.filter(c => c.key !== 'nRBC') : outputCells;
                 const nonZero = mainList.filter(c => counts[c.key] > 0);
 
                 if (nonZero.length > 0) {
                     let diffStr = '';
                     nonZero.forEach((c, i) => {
                         const pct = total > 0 ? ((counts[c.key] / total) * 100).toFixed(0) : 0;
-                        const dispName = (c.key === 'other')
-                            ? (otherLabelValue || 'other') + 's'
-                            : getCellPluralName(c);
+                        const dispName = (c.key === 'other') ? (otherLabelValue || 'other') + 's' : getCellPluralName(c);
                         if (i === 0) diffStr += `${dispName} ${pct}%`;
                         else if (i === nonZero.length - 1) diffStr += ` and ${dispName} ${pct}%`;
                         else diffStr += `, ${dispName} ${pct}%`;
@@ -3685,19 +2906,15 @@ See the LICENSE file for details.
                     const nRBCPer100 = total > 0 ? ((counts.nRBC / total) * 100).toFixed(0) : 0;
                     lines.push(`nRBCs: ${nRBCPer100} per 100 WBCs`);
                 }
-
                 if (mode === 'bone') {
                     let myeloid = 0, erythroid = 0;
                     ALL_CELLS.forEach(c => {
                         if (c.type === 'myeloid') myeloid += counts[c.key] || 0;
                         if (c.type === 'erythroid') erythroid += counts[c.key] || 0;
                     });
-                    if (erythroid > 0) {
-                        lines.push(`Myeloid:Erythroid ratio ${(myeloid / erythroid).toFixed(2)}:1`);
-                    }
+                    if (erythroid > 0) lines.push(`Myeloid:Erythroid ratio ${(myeloid / erythroid).toFixed(2)}:1`);
                 }
             }
-
             return lines.join('\n');
         }
 
@@ -3705,7 +2922,6 @@ See the LICENSE file for details.
             document.getElementById('outputBox').textContent = generateOutput();
         }
 
-        // ---------- Clipboard ----------
         function copyOutput() {
             const text = generateOutput();
             navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard'))
@@ -3752,18 +2968,17 @@ See the LICENSE file for details.
             if (id === 'keysModal') renderKeybinds();
             if (id === 'preferencesModal') initPreferences();
             if (id === 'backlogModal') renderBacklogList();
+            if (id === 'sessionModal') refreshAutoSaveUI();
         }
         function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
         document.querySelectorAll('.modal').forEach(m => {
             m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
         });
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 const cm = document.getElementById('confirmModal');
-                if (cm.classList.contains('open')) {
-                    closeConfirmModal(false);
-                    return;
-                }
+                if (cm.classList.contains('open')) { closeConfirmModal(false); return; }
                 document.querySelectorAll('.modal.open').forEach(m => m.classList.remove('open'));
             }
         });
@@ -3786,18 +3001,12 @@ See the LICENSE file for details.
             if (!pauseOnBlur && paused) resumeCounting();
             savePrefs();
         }
-
-        function setWarnOnReset(enabled) {
-            warnBeforeReset = !!enabled;
-            savePrefs();
-        }
-
+        function setWarnOnReset(enabled) { warnBeforeReset = !!enabled; savePrefs(); }
         function setChartType(val) {
             chartType = (val === 'pie') ? 'pie' : 'bar';
             savePrefs();
             updateHistogram();
         }
-
         function updateVolume(val) {
             globalVolume = parseFloat(val);
             document.getElementById('volDisplay').textContent = Math.round(globalVolume * 100) + '%';
@@ -3856,6 +3065,7 @@ See the LICENSE file for details.
                     updateHistogram();
                 }, 30);
             }
+            scheduleAutoSave();
         }
 
         // ---------- Keybinds ----------
@@ -3953,15 +3163,12 @@ See the LICENSE file for details.
                 { title: 'Reset Keybinds', okText: 'Reset' }
             );
             if (!ok) return;
-
             keyMap = Object.assign({}, DEFAULT_KEY_MAP);
             actionKeys = Object.assign({}, DEFAULT_ACTION_KEYS);
-
             savePrefs();
             renderKeybinds();
             renderDiffGrid();
             updateAll();
-
             await showConfirm(
                 'Keybinds have been reset to their default values.',
                 { title: '✓ Reset Complete', okText: 'OK', hideCancel: true }
@@ -3976,7 +3183,6 @@ See the LICENSE file for details.
             if (document.querySelector('.modal.open')) return;
 
             if (e.key === 'Enter') { copyOutput(); e.preventDefault(); return; }
-
             const directCell = keyMap[e.key];
             if (directCell) { change(directCell, 1); e.preventDefault(); return; }
 
@@ -3985,9 +3191,7 @@ See the LICENSE file for details.
                 if (k && e.key === k) { e.preventDefault(); runKeyAction(def.key); return; }
             }
 
-            if (e.key === '-' && keyMap['+']) {
-                change(keyMap['+'], -1); e.preventDefault(); return;
-            }
+            if (e.key === '-' && keyMap['+']) { change(keyMap['+'], -1); e.preventDefault(); return; }
 
             if (e.shiftKey && SHIFT_MAP[e.key]) {
                 const baseKey = SHIFT_MAP[e.key];
@@ -4020,7 +3224,7 @@ See the LICENSE file for details.
             updateAll();
         }
 
-        // ---------- Auto layout on screen change (only when in Auto mode) ----------
+        // ---------- Auto layout on resize ----------
         let resizeTimer = null;
         function scheduleAutoLayoutCheck(delay) {
             if (layoutMode !== 'auto') return;
@@ -4031,17 +3235,8 @@ See the LICENSE file for details.
         window.addEventListener('orientationchange', () => scheduleAutoLayoutCheck(250));
 
         // ---------- Update handling (user-initiated only) ----------
-        // The app is designed to be used as an offline desktop app: it does
-        // NOT check for or apply updates on its own. Updates only happen when
-        // the user clicks "Check for update" in the About dialog.
-        //
-        // There is deliberately no `controllerchange` listener — the browser
-        // may activate a waiting SW between sessions (e.g. after all windows
-        // are closed), and we do not want that to reload the page. The reload
-        // is triggered explicitly by checkForUpdateManually().
         const UPDATE_SNAPSHOT_KEY = 'haemcount.updateSnapshot.v1';
         const UPDATE_TOAST_KEY = 'haemcount.updateToast.v1';
-
         let updateInProgress = false;
 
         function captureAppState() {
@@ -4105,7 +3300,6 @@ See the LICENSE file for details.
         function setPendingUpdateToast() {
             try { sessionStorage.setItem(UPDATE_TOAST_KEY, '1'); } catch (e) { }
         }
-
         function consumePendingUpdateToast() {
             try {
                 if (sessionStorage.getItem(UPDATE_TOAST_KEY) === '1') {
@@ -4118,31 +3312,18 @@ See the LICENSE file for details.
 
         function performUpdateReload() {
             if (updateInProgress) return;
-
-            // Commit any in-progress edit (contenteditable count / Other label)
-            // so it gets captured in the snapshot.
             if (document.activeElement && document.activeElement.blur) {
                 document.activeElement.blur();
             }
-
             updateInProgress = true;
-
             const ok = saveUpdateSnapshot();
             if (ok) setPendingUpdateToast();
-
-            // Suppress the "unsaved counts" beforeunload prompt for our own reload.
             bypassUnloadWarning = true;
-
             showToast(ok ? 'Updating — your data will be preserved…' : 'Updating…');
             setTimeout(() => location.reload(), 150);
         }
 
-        // ---------- Service worker (offline support, manual updates only) ----------
-        // Once the SW is installed, all requests are served from the cache, so
-        // the app runs fully offline. The only network activity in the app is
-        // the user-triggered update check in the About dialog. (Browsers may
-        // still passively check /sw.js on navigation — that is a browser
-        // behaviour we cannot disable and it fails silently when offline.)
+        // ---------- Service worker ----------
         let swRegistration = null;
 
         async function setupServiceWorker() {
@@ -4152,35 +3333,21 @@ See the LICENSE file for details.
             } catch (err) {
                 console.warn('Service worker registration failed', err);
             }
-            // Deliberately NO controllerchange listener.
-            // The app never reloads itself because of the SW lifecycle. The
-            // only reload path is checkForUpdateManually(), triggered by the
-            // user from the About dialog.
         }
 
         async function checkForUpdateManually() {
             const btn = document.getElementById('checkUpdateBtn');
             if (!btn || btn.disabled) return;
-
-            if (!navigator.onLine) {
-                showToast('You are offline — cannot check for updates');
-                return;
-            }
-            if (!swRegistration) {
-                showToast('Update check unavailable');
-                return;
-            }
+            if (!navigator.onLine) { showToast('You are offline — cannot check for updates'); return; }
+            if (!swRegistration) { showToast('Update check unavailable'); return; }
 
             btn.disabled = true;
             const originalText = btn.textContent;
 
             try {
-                // If a new SW was already downloaded on a previous check, activate it.
                 let newSW = swRegistration.waiting;
-
                 if (!newSW) {
                     btn.textContent = '↻ Checking…';
-
                     newSW = await new Promise(resolve => {
                         let settled = false;
                         const finish = (sw) => {
@@ -4196,15 +3363,12 @@ See the LICENSE file for details.
                         swRegistration.update().catch(() => finish(null));
                     });
                 }
-
                 if (!newSW) {
                     btn.disabled = false;
                     btn.textContent = originalText;
                     showToast('You are on the latest version');
                     return;
                 }
-
-                // Wait for the new SW to reach "installed" (or already be active).
                 if (newSW.state !== 'installed' && newSW.state !== 'activated') {
                     btn.textContent = '↻ Downloading…';
                     await new Promise(resolve => {
@@ -4221,19 +3385,13 @@ See the LICENSE file for details.
                         newSW.addEventListener('statechange', onChange);
                     });
                 }
-
                 if (newSW.state === 'redundant') {
                     btn.disabled = false;
                     btn.textContent = originalText;
                     showToast('Update failed — try again later');
                     return;
                 }
-
                 btn.textContent = '↻ Updating…';
-
-                // Ask the new SW to activate, then wait for it (with a timeout),
-                // then reload from here — not from a global controllerchange
-                // listener, which would also fire on ordinary launches.
                 await new Promise(resolve => {
                     const done = () => {
                         navigator.serviceWorker.removeEventListener('controllerchange', done);
@@ -4242,10 +3400,8 @@ See the LICENSE file for details.
                     };
                     navigator.serviceWorker.addEventListener('controllerchange', done);
                     const timer = setTimeout(done, 3000);
-
                     newSW.postMessage({ type: 'SKIP_WAITING' });
                 });
-
                 performUpdateReload();
             } catch (err) {
                 console.warn('Update check failed', err);
@@ -4257,19 +3413,17 @@ See the LICENSE file for details.
 
         // ---------- Initialize ----------
         (async function bootstrap() {
-            // Pick the best available persistent backend before anything reads
-            // or writes preferences/backlog.
             await appStorage.init();
-            console.info('HaemCount storage backend:', appStorage.mode);
+            console.info('HaemCount storage backend:', appStorage.mode,
+                '| File System Access API:', appStorage.hasFileSystemAccess);
 
             initCounts();
             loadPrefs();
 
-            // Restore state that was preserved across an update reload.
             const pendingUpdateState = loadUpdateSnapshot();
             const restoredFromUpdate = restoreAppState(pendingUpdateState);
 
-            applyLayoutMode(true);   // apply view mode before first render
+            applyLayoutMode(true);
             renderDiffGrid();
             applyTheme(currentTheme);
             updateAll();
@@ -4281,23 +3435,34 @@ See the LICENSE file for details.
             }));
 
             ['hgb', 'mcv', 'wbc', 'plt'].forEach(id => {
-                document.getElementById(id).addEventListener('input', updateOutput);
+                document.getElementById(id).addEventListener('input', () => {
+                    updateOutput();
+                    scheduleAutoSave();
+                });
             });
+
+            updateStorageDiagnostics();
+
+            // Try to restore a previously chosen session file, and if the
+            // browser remembers permission, auto-load silently. Otherwise a
+            // one-click Resume bar is shown. If neither storage nor file
+            // auto-save can work, the warning banner explains what to do.
+            try {
+                await tryRestoreSessionFileHandle();
+            } catch (e) {
+                console.warn('Could not restore session file handle', e);
+            }
+            updateStorageDiagnostics();
 
             setTimeout(maybeShowOtherHint, 450);
 
-            // If we just updated, let the user know their counts carried over.
             if (restoredFromUpdate && consumePendingUpdateToast()) {
                 setTimeout(() => showToast('App updated — your counts were preserved'), 700);
             }
 
-            // ---------- Service worker init ----------
             if ('serviceWorker' in navigator) {
-                if (document.readyState === 'complete') {
-                    setupServiceWorker();
-                } else {
-                    window.addEventListener('load', setupServiceWorker);
-                }
+                if (document.readyState === 'complete') setupServiceWorker();
+                else window.addEventListener('load', setupServiceWorker);
             }
         })();
     </script>
