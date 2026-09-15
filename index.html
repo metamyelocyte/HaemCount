@@ -1,53 +1,3991 @@
-const VERSION = 'v1.0.1';                    // ← bump on every release
-const CACHE   = 'haemcount-' + VERSION;
-const ASSETS  = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/js/chart.umd.min.js',
-  '/icons/icon-192.png'
-];
+<!DOCTYPE html>
+<html lang="en">
 
-self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
-});
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>HaemCount</title>
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/png" href="/icons/icon-192.png">
+    <!--
+HaemCount — a web reimplementation of the HEMCOUNT differential cell counter
+Copyright (C) 2026  Tiffany Lau
+Licensed under the GNU General Public License v3.0 (GPLv3).
+See the LICENSE file for details.
+-->
+    <!-- Chart.js is self-hosted so the app no longer depends on a third-party CDN.
+         This is required for reliable offline use (see /sw.js). -->
+    <script src="/js/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #ebebeb;
+            --panel: #ffffff;
+            --border: #c0c0c0;
+            --accent: #2c7be5;
+            --danger: #e74c3c;
+            --text: #1e1e1e;
+            --muted: #6b6b6b;
+            --titlebar: #3a3a3a;
+            --titlebar-text: #ffffff;
+            --menu-bg: #f5f5f5;
+            --input-bg: #ffffff;
+            --toast-bg: #2b2b2b;
+            --toast-text: #ffffff;
+        }
 
-self.addEventListener('activate', (e) => {
-  e.waitUntil(
-    caches.keys()
-      .then(keys => Promise.all(
-        keys.filter(k => k !== CACHE).map(k => caches.delete(k))
-      ))
-      .then(() => self.clients.claim())
-  );
-});
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-self.addEventListener('message', (e) => {
-  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
-});
+        html,
+        body {
+            height: 100%;
+            width: 100%;
+            font-family: 'Segoe UI', Tahoma, system-ui, -apple-system, sans-serif;
+            font-size: 12px;
+            background: var(--bg);
+            color: var(--text);
+            overflow: hidden;
+        }
 
-self.addEventListener('fetch', (e) => {
-  const req = e.request;
-  if (req.method !== 'GET') return;
+        .app {
+            width: 100vw;
+            height: 100vh;
+            height: 100dvh;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+            overflow-y: auto;
+            transition: filter 0.2s ease, opacity 0.2s ease;
+        }
 
-  if (req.mode === 'navigate' || req.destination === 'document') {
-    e.respondWith(
-      fetch(req)
-        .then(res => {
-          const copy = res.clone();
-          caches.open(CACHE).then(c => c.put(req, copy));
-          return res;
-        })
-        .catch(() => caches.match(req).then(hit => hit || caches.match('/index.html')))
-    );
-    return;
-  }
+        /* Title bar */
+        .titlebar {
+            background: var(--titlebar);
+            color: var(--titlebar-text);
+            padding: 4px 10px;
+            font-weight: 600;
+            font-size: 11.5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
 
-  e.respondWith(
-    caches.match(req).then(hit => hit || fetch(req).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE).then(c => c.put(req, copy));
-      return res;
-    }))
-  );
-});
+        .titlebar .close {
+            cursor: pointer;
+            opacity: 0.65;
+            font-size: 13px;
+            line-height: 1;
+            padding: 0 2px;
+        }
+
+        .titlebar .close:hover {
+            opacity: 1;
+        }
+
+        /* Menu bar */
+        .menu {
+            display: flex;
+            gap: 18px;
+            padding: 4px 12px;
+            background: var(--menu-bg);
+            border-bottom: 1px solid var(--border);
+            font-size: 11.5px;
+            color: var(--text);
+            align-items: center;
+            flex-shrink: 0;
+            flex-wrap: wrap;
+        }
+
+        .menu span {
+            cursor: pointer;
+            user-select: none;
+            white-space: nowrap;
+        }
+
+        .menu span:hover {
+            color: var(--accent);
+        }
+
+        /* Main content */
+        .main {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+            padding: 6px 8px;
+            gap: 5px;
+            overflow: visible;
+            min-height: min-content;
+        }
+
+        .top-section,
+        .diff-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 4px;
+        }
+
+        .top-section {
+            flex-shrink: 0;
+        }
+
+        .params-grid {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
+            gap: 3px 8px;
+            align-items: center;
+            font-size: 11.5px;
+        }
+
+        .params-grid>label {
+            color: var(--text);
+            white-space: nowrap;
+            cursor: pointer;
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .param-field {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            min-width: 0;
+            justify-self: start;
+        }
+
+        .param-field input[type="number"] {
+            width: 92px;
+            max-width: 100%;
+            flex: 0 1 92px;
+            padding: 2px 6px;
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 11px;
+            text-align: right;
+            height: 20px;
+        }
+
+        .param-field .unit {
+            font-size: 10px;
+            color: var(--text);
+            white-space: nowrap;
+        }
+
+        .diff-cell {
+            display: flex;
+            align-items: center;
+            gap: 3px;
+            padding: 3px 5px;
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--menu-bg);
+            min-height: 26px;
+            overflow: hidden;
+            min-width: 0;
+        }
+
+        .diff-cell .cell-label {
+            flex: 1 1 auto;
+            font-size: 10px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            min-width: 0;
+            color: var(--text);
+        }
+
+        .diff-cell .editable-label {
+            outline: none;
+            padding: 0 1px;
+            border-radius: 2px;
+            border-bottom: 1px dashed var(--muted);
+            cursor: text;
+            transition: background 0.12s, border-color 0.12s;
+        }
+
+        .diff-cell .editable-label:hover {
+            border-bottom-color: var(--accent);
+            background: var(--input-bg);
+        }
+
+        .diff-cell .editable-label:focus {
+            border-bottom-color: var(--accent);
+            background: var(--input-bg);
+            box-shadow: 0 0 0 1px var(--accent);
+        }
+
+        .diff-cell .editable-label.hint-target {
+            background: var(--input-bg);
+            border-bottom-color: var(--accent);
+            border-radius: 3px;
+            animation: hintPulse 1.4s ease-in-out infinite;
+        }
+
+        @keyframes hintPulse {
+
+            0%,
+            100% {
+                outline: 2px solid transparent;
+                outline-offset: 1px;
+            }
+
+            50% {
+                outline: 2px solid var(--accent);
+                outline-offset: 3px;
+            }
+        }
+
+        .hint-bubble {
+            position: fixed;
+            z-index: 1200;
+            width: max-content;
+            max-width: 215px;
+            padding: 8px 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: flex-start;
+            background: var(--toast-bg);
+            color: var(--toast-text);
+            border-radius: 6px;
+            font-size: 10.5px;
+            line-height: 1.4;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.32);
+            animation: hintIn 0.22s ease-out;
+        }
+
+        @keyframes hintIn {
+            from {
+                opacity: 0;
+                transform: translateY(4px) scale(0.97);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0) scale(1);
+            }
+        }
+
+        .hint-bubble .hint-arrow {
+            position: absolute;
+            left: var(--arrow-x, 50%);
+            bottom: -4px;
+            width: 9px;
+            height: 9px;
+            margin-left: -4.5px;
+            background: var(--toast-bg);
+            transform: rotate(45deg);
+        }
+
+        .hint-bubble.below .hint-arrow {
+            bottom: auto;
+            top: -4px;
+        }
+
+        .hint-bubble .hint-btn {
+            align-self: flex-end;
+            padding: 2px 9px;
+            font-size: 9.5px;
+            font-weight: 600;
+            border: none;
+            border-radius: 3px;
+            background: var(--accent);
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .hint-bubble .hint-btn:hover {
+            filter: brightness(1.1);
+        }
+
+        .diff-cell .count-wrap {
+            display: flex;
+            align-items: stretch;
+            flex-shrink: 0;
+        }
+
+        .diff-cell .count-box {
+            width: 30px;
+            padding: 1px 3px;
+            border: 1px solid var(--border);
+            border-right: none;
+            border-radius: 3px 0 0 3px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 10.5px;
+            font-weight: 700;
+            text-align: center;
+            outline: none;
+            cursor: text;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 20px;
+        }
+
+        .diff-cell .count-box:focus {
+            outline: 1.5px solid var(--accent);
+            outline-offset: -1.5px;
+        }
+
+        .diff-cell .spinner {
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--border);
+            border-radius: 0 3px 3px 0;
+            background: var(--panel);
+            overflow: hidden;
+            flex-shrink: 0;
+        }
+
+        .diff-cell .spinner button {
+            width: 16px;
+            height: 10px;
+            border: none;
+            background: var(--panel);
+            color: var(--text);
+            cursor: pointer;
+            font-size: 6.5px;
+            line-height: 1;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: manipulation;
+        }
+
+        .diff-cell .spinner button:hover {
+            background: var(--border);
+        }
+
+        .diff-cell .spinner button.up {
+            border-bottom: 1px solid var(--border);
+        }
+
+        .diff-cell .pct {
+            font-size: 9.5px;
+            color: var(--muted);
+            text-align: right;
+            flex-shrink: 0;
+            min-width: 26px;
+            padding-left: 2px;
+        }
+
+        .mode-cell {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            gap: 4px;
+            padding: 3px 5px;
+            font-size: 10.5px;
+        }
+
+        .mode-cell label {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+
+        .mode-cell input[type="radio"] {
+            width: 12px;
+            height: 12px;
+            margin: 0;
+        }
+
+        .mode-cell .ratio {
+            margin-top: 2px;
+            font-size: 9.5px;
+            color: var(--muted);
+        }
+
+        .mode-cell .ratio strong {
+            color: var(--accent);
+        }
+
+        .hist-panel {
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--panel);
+            padding: 4px 6px;
+            flex: 1 1 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 72px;
+        }
+
+        .hist-container {
+            position: relative;
+            flex: 1 1 0;
+            width: 100%;
+            min-height: 52px;
+            overflow: hidden;
+        }
+
+        .hist-panel.chart-pie {
+            min-height: 150px;
+        }
+
+        .hist-panel.chart-pie .hist-container {
+            min-height: 118px;
+        }
+
+        .output-panel {
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--panel);
+            padding: 4px 6px;
+            flex: 1 1 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 64px;
+        }
+
+        .output-header {
+            font-size: 10.5px;
+            color: var(--muted);
+            margin-bottom: 3px;
+            font-style: italic;
+            flex-shrink: 0;
+        }
+
+        .output-box {
+            flex: 1;
+            padding: 4px 6px;
+            background: var(--panel);
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 9.5px;
+            white-space: pre-wrap;
+            line-height: 1.35;
+            overflow-y: auto;
+            cursor: pointer;
+            transition: background 0.12s, border-color 0.12s;
+            min-height: 0;
+        }
+
+        .output-box:hover {
+            background: var(--menu-bg);
+            border-color: var(--accent);
+        }
+
+        .output-box:active {
+            background: var(--border);
+        }
+
+        .statusbar {
+            padding: 4px 12px;
+            background: var(--menu-bg);
+            border-top: 1px solid var(--border);
+            font-size: 11.5px;
+            color: var(--text);
+            display: flex;
+            justify-content: space-between;
+            flex-shrink: 0;
+            gap: 8px;
+        }
+
+        .statusbar strong {
+            color: var(--text);
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            inset: 0;
+            background-color: rgba(0, 0, 0, 0.42);
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.open {
+            display: flex;
+        }
+
+        .modal-content {
+            background-color: var(--panel);
+            color: var(--text);
+            padding: 16px 18px;
+            border: 1px solid var(--border);
+            width: 90%;
+            max-width: 420px;
+            border-radius: 6px;
+            position: relative;
+            box-shadow: 0 8px 26px rgba(0, 0, 0, 0.28);
+            max-height: 88vh;
+            overflow-y: auto;
+            font-size: 11px;
+        }
+
+        .modal-content .close {
+            position: absolute;
+            right: 10px;
+            top: 6px;
+            font-size: 18px;
+            cursor: pointer;
+            color: var(--muted);
+            line-height: 1;
+        }
+
+        .modal-content .close:hover {
+            color: var(--text);
+        }
+
+        .modal-content h2 {
+            margin-bottom: 10px;
+            font-size: 12px;
+            color: var(--text);
+        }
+
+        .modal-content p {
+            margin-bottom: 6px;
+            font-size: 10px;
+            line-height: 1.4;
+            color: var(--muted);
+        }
+
+        .modal-content button {
+            padding: 4px 10px;
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            font-size: 10.5px;
+        }
+
+        .modal-content button:hover {
+            filter: brightness(0.92);
+        }
+
+        .modal-content button.secondary {
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .modal-content button.secondary:hover {
+            background: var(--border);
+        }
+
+        .modal-btn-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+            margin-top: 12px;
+        }
+
+        /* ---------- Custom confirm dialog ---------- */
+        .confirm-modal {
+            z-index: 1100;
+        }
+
+        .confirm-modal .modal-content {
+            max-width: 340px;
+        }
+
+        .confirm-modal .modal-content h2 {
+            font-size: 13px;
+            margin-bottom: 8px;
+            color: var(--text);
+        }
+
+        .confirm-modal .modal-content p {
+            margin-bottom: 14px;
+            font-size: 11.5px;
+            line-height: 1.55;
+            color: var(--text);
+            white-space: pre-wrap;
+        }
+
+        .confirm-modal .modal-btn-row {
+            justify-content: flex-end;
+            gap: 8px;
+            margin-top: 0;
+        }
+
+        .pref-section {
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .pref-section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .pref-section h4 {
+            font-size: 9.5px;
+            margin-bottom: 5px;
+            color: var(--text);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 700;
+        }
+
+        .pref-section select {
+            padding: 2px 6px;
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 10.5px;
+            width: 100%;
+        }
+
+        .pref-check {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 10.5px;
+            color: var(--text);
+        }
+
+        .pref-check input[type="checkbox"] {
+            width: 14px;
+            height: 14px;
+            margin: 0;
+        }
+
+        .volume-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 10px;
+        }
+
+        .volume-row input[type="range"] {
+            flex: 1;
+        }
+
+        .sound-row {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 4px;
+            font-size: 10px;
+        }
+
+        .sound-row label {
+            flex: 1;
+        }
+
+        .sound-row input[type="file"] {
+            max-width: 110px;
+            font-size: 8.5px;
+            color: var(--text);
+        }
+
+        .sound-row button {
+            padding: 2px 6px;
+            font-size: 9px;
+        }
+
+        .sound-status {
+            margin: -2px 0 6px 0;
+            padding-left: 2px;
+            font-size: 9px;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .sound-status.has-custom {
+            color: var(--accent);
+            font-weight: 600;
+        }
+
+        .layout-row {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 3px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 10.5px;
+        }
+
+        .layout-row:last-child {
+            border-bottom: none;
+        }
+
+        .layout-row span {
+            flex: 1;
+        }
+
+        .layout-row button {
+            padding: 1px 6px;
+            font-size: 9.5px;
+            background: transparent;
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .layout-row button:hover:not(:disabled) {
+            background: var(--border);
+        }
+
+        .layout-row button:disabled {
+            opacity: 0.35;
+            cursor: not-allowed;
+        }
+
+        .keybind-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 3px 0;
+            border-bottom: 1px solid var(--border);
+            font-size: 10.5px;
+        }
+
+        .keybind-row:last-child {
+            border-bottom: none;
+        }
+
+        .keybind-row label {
+            flex: 1;
+        }
+
+        .keybind-row input {
+            width: 32px;
+            text-align: center;
+            padding: 1px;
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-family: monospace;
+            font-size: 11px;
+        }
+
+        .keybind-row input:focus {
+            outline: 2px solid var(--accent);
+        }
+
+        .keybind-heading {
+            margin: 12px 0 4px;
+            font-size: 9.5px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: var(--text);
+        }
+
+        .backlog-save-row {
+            display: flex;
+            gap: 6px;
+            align-items: stretch;
+        }
+
+        .backlog-save-row input {
+            flex: 1;
+            min-width: 0;
+            padding: 4px 7px;
+            border: 1px solid var(--border);
+            border-radius: 3px;
+            background: var(--input-bg);
+            color: var(--text);
+            font-size: 11px;
+            height: 24px;
+        }
+
+        .backlog-list {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            max-height: 42vh;
+            overflow-y: auto;
+            padding-right: 2px;
+        }
+
+        .backlog-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            background: var(--menu-bg);
+        }
+
+        .backlog-item .info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .backlog-item .info .label {
+            font-weight: 700;
+            font-size: 11px;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .backlog-item .info .meta {
+            font-size: 9.5px;
+            color: var(--muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-top: 1px;
+        }
+
+        .backlog-item button {
+            padding: 3px 9px;
+            font-size: 9.5px;
+            flex-shrink: 0;
+        }
+
+        .backlog-empty {
+            font-size: 10px;
+            color: var(--muted);
+            font-style: italic;
+            padding: 8px 0;
+            text-align: center;
+        }
+
+        .backlog-footer {
+            display: flex;
+            justify-content: space-between;
+            gap: 6px;
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px solid var(--border);
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--toast-bg);
+            color: var(--toast-text);
+            padding: 6px 14px;
+            border-radius: 4px;
+            font-size: 10.5px;
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+            z-index: 2000;
+        }
+
+        .toast.show {
+            opacity: 1;
+        }
+
+        body.paused .app {
+            filter: grayscale(0.85) blur(2px);
+            opacity: 0.5;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .pause-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 1500;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(10, 14, 22, 0.62);
+            -webkit-backdrop-filter: blur(5px) grayscale(0.6);
+            backdrop-filter: blur(5px) grayscale(0.6);
+            cursor: pointer;
+            animation: pauseFade 0.18s ease-out;
+        }
+
+        .pause-overlay.show {
+            display: flex;
+        }
+
+        .pause-card {
+            text-align: center;
+            padding: 26px 40px;
+            border-radius: 12px;
+            background: rgba(18, 22, 30, 0.9);
+            border: 2px solid rgba(255, 255, 255, 0.28);
+            box-shadow: 0 14px 46px rgba(0, 0, 0, 0.55);
+            color: #fff;
+            max-width: 90vw;
+            animation: pausePop 0.2s ease-out;
+        }
+
+        .pause-icon {
+            font-size: 36px;
+            line-height: 1;
+            margin-bottom: 8px;
+        }
+
+        .pause-card h1 {
+            font-size: 32px;
+            letter-spacing: 8px;
+            margin-bottom: 8px;
+            color: #ffd166;
+            text-shadow: 0 0 18px rgba(255, 209, 102, 0.45);
+            animation: pausePulse 1.4s ease-in-out infinite;
+        }
+
+        .pause-card p {
+            font-size: 11.5px;
+            color: #d8d8d8;
+            margin-bottom: 14px;
+            line-height: 1.5;
+        }
+
+        .pause-card button {
+            padding: 8px 22px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            border: none;
+            border-radius: 5px;
+            background: var(--accent);
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .pause-card button:hover {
+            filter: brightness(1.1);
+        }
+
+        @keyframes pauseFade {
+            from {
+                opacity: 0;
+            }
+
+            to {
+                opacity: 1;
+            }
+        }
+
+        @keyframes pausePop {
+            from {
+                transform: scale(0.94);
+                opacity: 0;
+            }
+
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        @keyframes pausePulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.45;
+            }
+        }
+
+        .about-content {
+            max-width: 470px;
+            padding: 0;
+            overflow: hidden;
+        }
+
+        .about-header {
+            position: relative;
+            padding: 20px 24px 16px;
+            text-align: center;
+            color: #fff;
+            background: linear-gradient(135deg, var(--titlebar) 0%, var(--accent) 140%);
+        }
+
+        .about-header .close {
+            top: 8px;
+            right: 12px;
+            font-size: 20px;
+            color: rgba(255, 255, 255, 0.78);
+        }
+
+        .about-header .close:hover {
+            color: #fff;
+        }
+
+        .about-header .about-logo {
+            display: block;
+            width: 64px;
+            height: 64px;
+            margin: 0 auto 8px;
+            object-fit: contain;
+            border-radius: 14px;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+        }
+
+        .about-header h2 {
+            display: inline-block;
+            margin: 0;
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+            color: #fff;
+        }
+
+        .about-version {
+            display: inline-block;
+            margin-left: 6px;
+            padding: 1px 7px;
+            font-size: 9.5px;
+            font-weight: 600;
+            letter-spacing: 0.4px;
+            vertical-align: middle;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .about-header .about-tagline {
+            margin: 7px 0 0;
+            font-size: 10px;
+            line-height: 1.45;
+            color: rgba(255, 255, 255, 0.88);
+        }
+
+        .about-body {
+            padding: 14px 20px 6px;
+            max-height: 58vh;
+            overflow-y: auto;
+        }
+
+        .about-section {
+            margin-bottom: 13px;
+        }
+
+        .about-section:last-child {
+            margin-bottom: 4px;
+        }
+
+        .about-section h4 {
+            margin-bottom: 4px;
+            font-size: 9.5px;
+            font-weight: 700;
+            letter-spacing: 0.6px;
+            text-transform: uppercase;
+            color: var(--accent);
+        }
+
+        .about-section p {
+            margin-bottom: 5px;
+            font-size: 10.5px;
+            line-height: 1.5;
+            color: var(--text);
+        }
+
+        .about-section p:last-child {
+            margin-bottom: 0;
+        }
+
+        .about-section a {
+            color: var(--accent);
+            text-decoration: none;
+        }
+
+        .about-section a:hover {
+            text-decoration: underline;
+        }
+
+        .about-disclaimer {
+            padding: 9px 11px;
+            border-left: 3px solid var(--danger);
+            border-radius: 0 4px 4px 0;
+            background: rgba(128, 128, 128, 0.12);
+        }
+
+        .about-disclaimer h4 {
+            color: var(--danger);
+        }
+
+        .about-footer {
+            display: flex;
+            justify-content: flex-end;
+            padding: 10px 20px 14px;
+            border-top: 1px solid var(--border);
+            background: var(--menu-bg);
+        }
+
+        /* ---------- Small-window fallbacks ---------- */
+        @media (max-width: 640px) {
+            .main {
+                padding: 4px 6px;
+                gap: 4px;
+            }
+
+            .titlebar {
+                padding: 3px 8px;
+            }
+
+            .menu {
+                gap: 12px;
+                padding: 3px 8px;
+            }
+
+            .statusbar {
+                padding: 3px 8px;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .diff-cell {
+                padding: 2px 4px;
+                gap: 2px;
+            }
+
+            .diff-cell .cell-label {
+                font-size: 9px;
+            }
+
+            .diff-cell .count-box {
+                width: 26px;
+            }
+
+            .diff-cell .spinner button {
+                width: 14px;
+            }
+
+            .diff-cell .pct {
+                min-width: 22px;
+                font-size: 9px;
+            }
+        }
+
+        @media (max-height: 640px) {
+            .hist-panel {
+                min-height: 58px;
+            }
+
+            .hist-container {
+                min-height: 40px;
+            }
+
+            .hist-panel.chart-pie {
+                min-height: 120px;
+            }
+
+            .hist-panel.chart-pie .hist-container {
+                min-height: 96px;
+            }
+
+            .output-panel {
+                min-height: 52px;
+            }
+        }
+
+        @media (max-height: 520px) {
+            .main {
+                padding: 3px 5px;
+                gap: 3px;
+            }
+
+            .titlebar,
+            .menu,
+            .statusbar {
+                padding: 2px 8px;
+            }
+
+            .hist-panel,
+            .output-panel {
+                padding: 3px 5px;
+            }
+
+            .hist-panel {
+                min-height: 48px;
+            }
+
+            .hist-container {
+                min-height: 32px;
+            }
+
+            .hist-panel.chart-pie {
+                min-height: 96px;
+            }
+
+            .hist-panel.chart-pie .hist-container {
+                min-height: 76px;
+            }
+
+            .output-panel {
+                min-height: 42px;
+            }
+
+            .output-header {
+                font-size: 9.5px;
+                margin-bottom: 2px;
+            }
+
+            .diff-cell {
+                min-height: 22px;
+                padding: 2px 4px;
+            }
+        }
+
+        /* ---------- MOBILE LAYOUT MODE ---------- */
+        /* Applied via body.layout-mobile class. Overrides all desktop rules
+           and media queries so the mobile layout is consistent regardless of
+           the actual window size (a desktop can force mobile mode and vice
+           versa). */
+        body.layout-mobile .titlebar {
+            padding: 10px 14px;
+            font-size: 14px;
+        }
+
+        body.layout-mobile .titlebar .close {
+            font-size: 18px;
+            padding: 0 6px;
+        }
+
+        body.layout-mobile .menu {
+            gap: 16px;
+            padding: 10px 14px;
+            font-size: 14px;
+        }
+
+        body.layout-mobile .main {
+            padding: 10px 12px;
+            gap: 10px;
+        }
+
+        body.layout-mobile .params-grid {
+            grid-template-columns: 1fr;
+            gap: 10px;
+            font-size: 14px;
+        }
+
+        body.layout-mobile .params-grid>label {
+            font-size: 13px;
+            color: var(--muted);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        body.layout-mobile .param-field {
+            justify-self: stretch;
+            width: 100%;
+        }
+
+        body.layout-mobile .param-field input[type="number"] {
+            width: auto;
+            flex: 1 1 auto;
+            font-size: 16px;
+            height: 44px;
+            text-align: left;
+            padding: 6px 12px;
+            border-radius: 6px;
+        }
+
+        body.layout-mobile .param-field .unit {
+            font-size: 13px;
+            color: var(--muted);
+        }
+
+        body.layout-mobile .diff-grid {
+            grid-template-columns: 1fr;
+            gap: 8px;
+        }
+
+        body.layout-mobile .diff-cell {
+            padding: 10px 12px;
+            min-height: 60px;
+            gap: 10px;
+            border-radius: 6px;
+        }
+
+        body.layout-mobile .diff-cell .cell-label {
+            font-size: 14px;
+        }
+
+        body.layout-mobile .diff-cell .count-box {
+            width: 64px;
+            font-size: 18px;
+            min-height: 40px;
+            padding: 6px 8px;
+            border-radius: 6px 0 0 6px;
+        }
+
+        body.layout-mobile .diff-cell .spinner {
+            border-radius: 0 6px 6px 0;
+        }
+
+        body.layout-mobile .diff-cell .spinner button {
+            width: 40px;
+            height: 20px;
+            font-size: 11px;
+        }
+
+        body.layout-mobile .diff-cell .pct {
+            font-size: 13px;
+            min-width: 48px;
+            padding-left: 6px;
+        }
+
+        body.layout-mobile .mode-cell {
+            grid-column: 1 / -1;
+            padding: 12px 14px;
+            font-size: 14px;
+            gap: 10px;
+            border-radius: 6px;
+        }
+
+        body.layout-mobile .mode-cell label {
+            gap: 8px;
+        }
+
+        body.layout-mobile .mode-cell input[type="radio"] {
+            width: 20px;
+            height: 20px;
+        }
+
+        body.layout-mobile .mode-cell .ratio {
+            font-size: 13px;
+            margin-top: 6px;
+        }
+
+        body.layout-mobile .hist-panel {
+            padding: 10px 12px;
+            min-height: 200px;
+            border-radius: 6px;
+        }
+
+        body.layout-mobile .hist-container {
+            min-height: 170px;
+        }
+
+        body.layout-mobile .hist-panel.chart-pie {
+            min-height: 300px;
+        }
+
+        body.layout-mobile .hist-panel.chart-pie .hist-container {
+            min-height: 260px;
+        }
+
+        body.layout-mobile .output-panel {
+            padding: 10px 12px;
+            min-height: 160px;
+            border-radius: 6px;
+        }
+
+        body.layout-mobile .output-header {
+            font-size: 12px;
+            margin-bottom: 6px;
+        }
+
+        body.layout-mobile .output-box {
+            font-size: 12.5px;
+            line-height: 1.5;
+            padding: 8px 10px;
+        }
+
+        body.layout-mobile .statusbar {
+            padding: 10px 14px;
+            font-size: 13px;
+        }
+
+        /* Modals */
+        body.layout-mobile .modal-content {
+            width: 94%;
+            max-width: 94%;
+            padding: 20px 18px;
+            font-size: 13px;
+            border-radius: 10px;
+            max-height: 92vh;
+        }
+
+        body.layout-mobile .modal-content .close {
+            font-size: 24px;
+            right: 14px;
+            top: 10px;
+        }
+
+        body.layout-mobile .modal-content h2 {
+            font-size: 16px;
+            margin-bottom: 14px;
+        }
+
+        body.layout-mobile .modal-content p {
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        body.layout-mobile .modal-content button {
+            padding: 10px 18px;
+            font-size: 13px;
+            border-radius: 6px;
+        }
+
+        body.layout-mobile .modal-btn-row {
+            flex-direction: column-reverse;
+            gap: 8px;
+        }
+
+        body.layout-mobile .modal-btn-row button {
+            width: 100%;
+        }
+
+        body.layout-mobile .pref-section {
+            margin-bottom: 14px;
+            padding-bottom: 12px;
+        }
+
+        body.layout-mobile .pref-section h4 {
+            font-size: 11px;
+            margin-bottom: 8px;
+        }
+
+        body.layout-mobile .pref-section select {
+            font-size: 15px;
+            padding: 8px 12px;
+            height: 40px;
+            border-radius: 6px;
+        }
+
+        body.layout-mobile .pref-check {
+            font-size: 13px;
+            gap: 10px;
+        }
+
+        body.layout-mobile .pref-check input[type="checkbox"] {
+            width: 22px;
+            height: 22px;
+        }
+
+        body.layout-mobile .volume-row {
+            font-size: 12px;
+        }
+
+        body.layout-mobile .sound-row {
+            font-size: 12px;
+            margin-bottom: 8px;
+            gap: 8px;
+        }
+
+        body.layout-mobile .sound-row button {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        body.layout-mobile .sound-status {
+            font-size: 11px;
+            margin-bottom: 10px;
+        }
+
+        body.layout-mobile .layout-row {
+            font-size: 13px;
+            padding: 8px 0;
+        }
+
+        body.layout-mobile .layout-row input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+        }
+
+        body.layout-mobile .layout-row button {
+            font-size: 12px;
+            padding: 4px 12px;
+            border-radius: 4px;
+        }
+
+        body.layout-mobile .keybind-row {
+            font-size: 13px;
+            padding: 8px 0;
+        }
+
+        body.layout-mobile .keybind-row input {
+            width: 48px;
+            font-size: 15px;
+            padding: 6px;
+            border-radius: 5px;
+        }
+
+        body.layout-mobile .keybind-heading {
+            font-size: 11px;
+            margin: 14px 0 6px;
+        }
+
+        body.layout-mobile .backlog-save-row input {
+            font-size: 15px;
+            height: 42px;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+
+        body.layout-mobile .backlog-item {
+            padding: 12px 14px;
+            border-radius: 8px;
+        }
+
+        body.layout-mobile .backlog-item .info .label {
+            font-size: 14px;
+        }
+
+        body.layout-mobile .backlog-item .info .meta {
+            font-size: 11px;
+            margin-top: 3px;
+        }
+
+        body.layout-mobile .backlog-item button {
+            padding: 8px 14px;
+            font-size: 12px;
+            border-radius: 5px;
+        }
+
+        /* Pause overlay */
+        body.layout-mobile .pause-card {
+            padding: 30px 28px;
+            border-radius: 14px;
+        }
+
+        body.layout-mobile .pause-card h1 {
+            font-size: 30px;
+            letter-spacing: 6px;
+        }
+
+        body.layout-mobile .pause-card p {
+            font-size: 12.5px;
+        }
+
+        body.layout-mobile .pause-card button {
+            padding: 12px 28px;
+            font-size: 14px;
+        }
+
+        /* About modal */
+        body.layout-mobile .about-content {
+            max-width: 94%;
+        }
+
+        body.layout-mobile .about-header {
+            padding: 24px 20px 20px;
+        }
+
+        body.layout-mobile .about-header .about-logo {
+            width: 76px;
+            height: 76px;
+        }
+
+        body.layout-mobile .about-header h2 {
+            font-size: 24px;
+        }
+
+        body.layout-mobile .about-header .about-tagline {
+            font-size: 11.5px;
+        }
+
+        body.layout-mobile .about-body {
+            padding: 18px 22px 6px;
+        }
+
+        body.layout-mobile .about-section h4 {
+            font-size: 10.5px;
+        }
+
+        body.layout-mobile .about-section p {
+            font-size: 12px;
+        }
+
+        /* Toast */
+        body.layout-mobile .toast {
+            bottom: 24px;
+            padding: 10px 20px;
+            font-size: 13px;
+            border-radius: 6px;
+        }
+
+        /* Hint bubble */
+        body.layout-mobile .hint-bubble {
+            font-size: 12px;
+            max-width: 260px;
+            padding: 10px 12px;
+        }
+
+        body.layout-mobile .hint-bubble .hint-btn {
+            padding: 5px 14px;
+            font-size: 11.5px;
+        }
+
+        /* ---------- MOBILE NUMPAD DATA ENTRY ---------- */
+        .numpad-cell {
+            display: none;
+        }
+
+        body.layout-mobile .numpad-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            grid-column: 1 / -1;
+        }
+
+        /* Numpad replaces the per-cell list on mobile… */
+        body.layout-mobile .diff-cell {
+            display: none;
+        }
+
+        /* …unless the user switches to List view */
+        body.layout-mobile.mobile-list .diff-cell {
+            display: flex;
+        }
+
+        body.layout-mobile.mobile-list .numpad-cell {
+            display: none;
+        }
+
+        .numpad-head {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 8px;
+            padding: 0 2px;
+        }
+
+        .numpad-total {
+            font-size: 13px;
+            font-weight: 800;
+            color: var(--text);
+        }
+
+        .numpad-hint {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            color: var(--muted);
+        }
+
+        .numpad-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 8px;
+        }
+
+        .np-btn {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+            min-height: 96px;
+            padding: 14px 6px 10px;
+            border: none;
+            border-radius: 14px;
+            background: var(--np-color, var(--accent));
+            color: var(--np-text, #fff);
+            font-family: inherit;
+            cursor: pointer;
+            user-select: none;
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent;
+            -webkit-touch-callout: none;
+            touch-action: manipulation;
+            box-shadow: 0 3px 0 rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+            transition: transform 0.07s ease, box-shadow 0.07s ease, filter 0.12s ease;
+        }
+
+        .np-btn:active {
+            transform: translateY(3px);
+            box-shadow: 0 0 0 rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.28);
+            filter: brightness(1.15);
+        }
+
+        .np-btn .np-key {
+            position: absolute;
+            top: 7px;
+            left: 9px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 11px;
+            font-weight: 800;
+            opacity: 0.7;
+        }
+
+        .np-btn .np-count {
+            font-size: 30px;
+            font-weight: 800;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+            opacity: 0.42;
+            transition: opacity 0.15s ease;
+        }
+
+        .np-btn.has-count .np-count {
+            opacity: 1;
+        }
+
+        .np-btn .np-name {
+            font-size: 11.5px;
+            font-weight: 700;
+            line-height: 1.15;
+            text-align: center;
+            letter-spacing: 0.2px;
+            overflow-wrap: anywhere;
+        }
+
+        .entry-toggle {
+            display: none;
+        }
+
+        body.layout-mobile .entry-toggle {
+            display: flex;
+            gap: 6px;
+            margin-top: 10px;
+        }
+
+        body.layout-mobile .entry-toggle button {
+            flex: 1;
+            padding: 9px 10px;
+            font-family: inherit;
+            font-size: 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--panel);
+            color: var(--text);
+            cursor: pointer;
+        }
+
+        body.layout-mobile .entry-toggle button.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+            font-weight: 700;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--muted);
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app">
+        <div class="titlebar">
+            <span>HaemCount</span>
+            <span class="close" onclick="confirmReset()" title="Reset all counts">✕</span>
+        </div>
+
+        <div class="menu">
+            <span onclick="copyOutput()">Copy</span>
+            <span onclick="confirmReset()">Reset</span>
+            <span onclick="openBacklog()">Backlog</span>
+            <span onclick="openModal('preferencesModal')">Preferences</span>
+            <span onclick="openModal('keysModal')">Customize Keys</span>
+            <span onclick="openModal('aboutModal')">About</span>
+        </div>
+
+        <div class="main" id="mainArea">
+            <div class="top-section" data-section="params">
+                <div class="params-grid">
+                    <label for="hgb">Haemoglobin</label>
+                    <div class="param-field">
+                        <input type="number" id="hgb" value="12" step="0.1" min="0">
+                        <span class="unit">g/dL</span>
+                    </div>
+
+                    <label for="mcv">Mean Corpuscular Volume</label>
+                    <div class="param-field">
+                        <input type="number" id="mcv" value="82" step="0.1" min="0">
+                        <span class="unit">fL</span>
+                    </div>
+
+                    <label for="wbc">White blood cells</label>
+                    <div class="param-field">
+                        <input type="number" id="wbc" value="9" step="0.1" min="0">
+                        <span class="unit">×10⁹/L</span>
+                    </div>
+
+                    <label for="plt">Platelets</label>
+                    <div class="param-field">
+                        <input type="number" id="plt" value="460" step="1" min="0">
+                        <span class="unit">×10⁹/L</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="diff-grid" id="diffGrid" data-section="diff"></div>
+
+            <div class="hist-panel" data-section="hist">
+                <div class="hist-container">
+                    <canvas id="histChart"></canvas>
+                </div>
+            </div>
+
+            <div class="output-panel" data-section="output">
+                <div class="output-header">Clipboard output preview (Press Enter to copy):</div>
+                <div class="output-box" id="outputBox" onclick="copyOutput()" title="Click to copy to clipboard"></div>
+            </div>
+        </div>
+
+        <div class="statusbar">
+            <span>Total cells counted: <strong id="totalCount">0</strong></span>
+            <span>HaemCount v1.0</span>
+        </div>
+    </div>
+
+    <div class="pause-overlay" id="pauseOverlay" onclick="resumeCounting()">
+        <div class="pause-card">
+            <div class="pause-icon">⏸</div>
+            <h1>PAUSED</h1>
+            <p>Counting is paused because this window lost focus.<br>
+                Focus this window to resume automatically.</p>
+            <button type="button">Resume Counting</button>
+        </div>
+    </div>
+
+    <div id="backlogModal" class="modal">
+        <div class="modal-content" style="max-width: 560px;">
+            <span class="close" onclick="closeModal('backlogModal')">&times;</span>
+            <h2>Backlog</h2>
+
+            <div class="pref-section">
+                <h4>Save Current</h4>
+                <div class="backlog-save-row">
+                    <input type="text" id="backlogLabelInput" placeholder="Label (e.g., Patient A)" maxlength="60"
+                        onkeydown="if(event.key==='Enter'){event.preventDefault();saveCurrentToBacklog();}">
+                    <button onclick="saveCurrentToBacklog()">Save</button>
+                </div>
+                <p style="margin-top: 6px;">Saves the current counts, blood parameters, sample type and the Other label.
+                </p>
+            </div>
+
+            <div class="pref-section">
+                <h4>Saved Entries</h4>
+                <div id="backlogList" class="backlog-list"></div>
+            </div>
+
+            <div class="backlog-footer">
+                <button class="secondary" onclick="confirmClearBacklog()">Clear All</button>
+                <button onclick="closeModal('backlogModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="preferencesModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('preferencesModal')">&times;</span>
+            <h2>Preferences</h2>
+
+            <div class="pref-section">
+                <h4>View Mode</h4>
+                <select id="layoutModeSelect" onchange="setLayoutMode(this.value)">
+                    <option value="auto">Auto (based on device)</option>
+                    <option value="desktop">Desktop</option>
+                    <option value="mobile">Mobile</option>
+                </select>
+            </div>
+
+            <div class="pref-section">
+                <h4>Theme</h4>
+                <select id="themeSelect" onchange="applyTheme(this.value)">
+                    <option value="light">Light</option>
+                    <option value="dark">Dark</option>
+                    <option value="solarizedLight">Solarized Light</option>
+                    <option value="solarizedDark">Solarized Dark</option>
+                    <option value="sepia">Sepia</option>
+                    <option value="pink">Pink</option>
+                </select>
+            </div>
+            <div class="pref-section">
+                <h4>Behavior</h4>
+                <label class="pref-check">
+                    <input type="checkbox" id="pauseOnBlurCheck" onchange="setPauseOnBlur(this.checked)">
+                    Show pause overlay when this window loses focus
+                </label>
+                <label class="pref-check" style="margin-top: 6px;">
+                    <input type="checkbox" id="warnOnResetCheck" onchange="setWarnOnReset(this.checked)">
+                    Warn before resetting counts or leaving with unsaved counts
+                </label>
+            </div>
+            <div class="pref-section">
+                <h4>Histogram</h4>
+                <select id="chartTypeSelect" onchange="setChartType(this.value)">
+                    <option value="bar">Bar chart</option>
+                    <option value="pie">Pie chart</option>
+                </select>
+            </div>
+            <div class="pref-section">
+                <h4>Volume</h4>
+                <div class="volume-row">
+                    <input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="0.5"
+                        oninput="updateVolume(this.value)">
+                    <span id="volDisplay" style="min-width: 34px; text-align: right;">50%</span>
+                </div>
+            </div>
+            <div class="pref-section">
+                <h4>Custom Sounds</h4>
+                <div class="sound-row">
+                    <label>Normal beep:</label>
+                    <input type="file" accept="audio/*" onchange="loadSound(this, 'normal')">
+                    <button class="secondary" onclick="testSound('normal')" title="Test">▶</button>
+                    <button class="secondary" onclick="resetSound('normal')" title="Reset">↺</button>
+                </div>
+                <div class="sound-status" id="soundStatus-normal">Default beep</div>
+
+                <div class="sound-row">
+                    <label>Century beep:</label>
+                    <input type="file" accept="audio/*" onchange="loadSound(this, 'century')">
+                    <button class="secondary" onclick="testSound('century')" title="Test">▶</button>
+                    <button class="secondary" onclick="resetSound('century')" title="Reset">↺</button>
+                </div>
+                <div class="sound-status" id="soundStatus-century">Default beep</div>
+            </div>
+            <div class="pref-section">
+                <h4>Layout</h4>
+                <div id="layoutList"></div>
+            </div>
+            <button onclick="closeModal('preferencesModal')">Close</button>
+        </div>
+    </div>
+
+    <div id="keysModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('keysModal')">&times;</span>
+            <h2>Customize Keys</h2>
+            <p>Click a field and press a key to assign. Press Backspace to clear. Leave an action blank to disable it.
+            </p>
+            <div id="keybindList"></div>
+
+            <div class="keybind-heading">Actions</div>
+            <div id="actionKeybindList"></div>
+
+            <div class="modal-btn-row">
+                <button class="secondary" onclick="resetKeybindsToDefault()">Reset to Default</button>
+                <button onclick="saveKeybinds()">Save Keybinds</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="aboutModal" class="modal">
+        <div class="modal-content about-content">
+            <div class="about-header">
+                <span class="close" onclick="closeModal('aboutModal')">&times;</span>
+                <img class="about-logo" src="/icons/icon-192.png" alt="HaemCount app icon"
+                    onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'about-logo about-logo-fallback',textContent:'🩸'}))">
+                <h2>HaemCount</h2><span class="about-version">v1.0</span>
+                <p class="about-tagline">A web reimplementation of the HEMCOUNT differential cell counter</p>
+            </div>
+
+            <div class="about-body">
+                <div class="about-section">
+                    <h4>Copyright</h4>
+                    <p>© 2026 Tiffany Lau. All rights reserved.</p>
+                </div>
+
+                <div class="about-section">
+                    <h4>Credits</h4>
+                    <p>Inspired by the original <strong>HEMCOUNT</strong> by Nelson Chan
+                        (<a href="https://github.com/nelsonchanhk/HEMCOUNT" target="_blank"
+                            rel="noopener">@nelsonchanhk</a>).</p>
+                </div>
+
+                <div class="about-section">
+                    <h4>License</h4>
+                    <p>GNU General Public License v3.0 (GPLv3).</p>
+                    <p>This program comes with <strong>ABSOLUTELY NO WARRANTY</strong>. You are welcome to
+                        redistribute it under certain conditions. See the LICENSE file for details.</p>
+                </div>
+
+                <div class="about-section about-disclaimer">
+                    <h4>Disclaimer</h4>
+                    <p>For educational and research support only. <strong>Not a medical device.</strong></p>
+                    <p>Must not be used as the sole basis for clinical diagnosis or patient management. All clinical
+                        decisions must be made by qualified healthcare professionals using validated laboratory systems.
+                    </p>
+                </div>
+            </div>
+
+            <div class="about-footer">
+                <button onclick="closeModal('aboutModal')">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Custom confirm dialog (replaces native confirm/alert) -->
+    <div id="confirmModal" class="modal confirm-modal">
+        <div class="modal-content">
+            <h2 id="confirmTitle">Confirm</h2>
+            <p id="confirmMessage"></p>
+            <div class="modal-btn-row">
+                <button class="secondary" id="confirmCancelBtn" type="button">Cancel</button>
+                <button id="confirmOkBtn" type="button">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast">Copied!</div>
+
+    <script>
+        // ---------- Cell definitions ----------
+        const ALL_CELLS = [
+            { key: 'eos', dispName: 'Eosinophil', name: 'eosinophils', short: 'Eos', type: 'myeloid' },
+            { key: 'baso', dispName: 'Basophil', name: 'basophils', short: 'Baso', type: 'myeloid' },
+            { key: 'other', dispName: 'Other', name: 'other cells', short: 'Other', type: 'other' },
+            { key: 'mono', dispName: 'Monocyte', name: 'monocytes', short: 'Mono', type: 'myeloid' },
+            { key: 'band', dispName: 'Neutrophil', name: 'neutrophils', short: 'Neu', type: 'myeloid' },
+            { key: 'lym', dispName: 'Lymphocyte', name: 'lymphocytes', short: 'Lym', type: 'lymphoid' },
+            { key: 'plasma', dispName: 'Plasma cell', name: 'plasma cells', short: 'Plasma', type: 'other' },
+            { key: 'promy', dispName: 'Promyelocyte', name: 'promyelocytes', short: 'Pro', type: 'myeloid' },
+            { key: 'mye', dispName: 'Myelocyte', name: 'myelocytes', short: 'Mye', type: 'myeloid' },
+            { key: 'meta', dispName: 'Metamyelocyte', name: 'metamyelocytes', short: 'Meta', type: 'myeloid' },
+            { key: 'blast', dispName: 'Blast', name: 'blasts', short: 'Blast', type: 'myeloid' },
+            { key: 'nRBC', dispName: 'Nucleated RBC', name: 'nRBCs', short: 'nRBC', type: 'erythroid' },
+        ];
+
+        const HIST_ORDER = ['blast', 'promy', 'mye', 'meta', 'band', 'lym', 'mono', 'other', 'eos', 'baso', 'plasma', 'nRBC'];
+
+        const PIE_ORDER = [
+            'blast', 'promy', 'mye', 'meta', 'band',
+            'mono', 'eos', 'baso',
+            'nRBC',
+            'lym', 'plasma', 'other'
+        ];
+
+        const CELL_COLORS = {
+            blast: '#08306b',
+            promy: '#10529e',
+            mye: '#1c74c9',
+            meta: '#4696e0',
+            band: '#84bdf0',
+            eos: '#00a6c8',
+            baso: '#5a63d0',
+            mono: '#2c7f9e',
+            nRBC: '#d62828',
+            lym: '#43a047',
+            other: '#f4a261',
+            plasma: '#9b59b6'
+        };
+
+        const FALLBACK_PIE_COLOR = '#8a8a8a';
+
+        const THEMES = {
+            light: {
+                bg: '#ebebeb', panel: '#ffffff', border: '#c0c0c0',
+                accent: '#2c7be5', danger: '#e74c3c', text: '#1e1e1e', muted: '#6b6b6b',
+                titlebar: '#3a3a3a', titlebarText: '#ffffff',
+                menuBg: '#f5f5f5', inputBg: '#ffffff',
+                toastBg: '#2b2b2b', toastText: '#ffffff'
+            },
+            dark: {
+                bg: '#161616', panel: '#232323', border: '#3d3d3d',
+                accent: '#5aa3ff', danger: '#ff6b6b', text: '#e4e4e4', muted: '#9a9a9a',
+                titlebar: '#000000', titlebarText: '#f0f0f0',
+                menuBg: '#1c1c1c', inputBg: '#161616',
+                toastBg: '#4a4a4a', toastText: '#ffffff'
+            },
+            solarizedLight: {
+                bg: '#fdf6e3', panel: '#eee8d5', border: '#b5ad95',
+                accent: '#268bd2', danger: '#dc322f', text: '#073642', muted: '#657b83',
+                titlebar: '#002b36', titlebarText: '#eee8d5',
+                menuBg: '#f5efdc', inputBg: '#e2dbc0',
+                toastBg: '#002b36', toastText: '#eee8d5'
+            },
+            solarizedDark: {
+                bg: '#002b36', panel: '#073642', border: '#586e75',
+                accent: '#268bd2', danger: '#dc322f', text: '#eee8d5', muted: '#93a1a1',
+                titlebar: '#001f27', titlebarText: '#eee8d5',
+                menuBg: '#073642', inputBg: '#002b36',
+                toastBg: '#001f27', toastText: '#eee8d5'
+            },
+            sepia: {
+                bg: '#f4ecd8', panel: '#fdf6e3', border: '#d3c7a8',
+                accent: '#a67c00', danger: '#b84a3b', text: '#3a3020', muted: '#7a6a4a',
+                titlebar: '#5a4a2a', titlebarText: '#fdf6e3',
+                menuBg: '#ede4c8', inputBg: '#fdf6e3',
+                toastBg: '#5a4a2a', toastText: '#fdf6e3'
+            },
+            pink: {
+                bg: '#fdeef4', panel: '#ffffff', border: '#f2b8d0',
+                accent: '#e0559a', danger: '#d6336c', text: '#3d1f2c', muted: '#9a6b80',
+                titlebar: '#8e2a56', titlebarText: '#ffe8f2',
+                menuBg: '#fce3ee', inputBg: '#ffffff',
+                toastBg: '#8e2a56', toastText: '#ffe8f2'
+            }
+        };
+
+        let counts = {};
+        let mode = 'peripheral';
+        let chart = null;
+        let globalVolume = 0.5;
+        let audioCtx = null;
+        let currentTheme = 'light';
+        let chartType = 'bar';
+        let customSounds = { normal: null, century: null };
+        let otherLabelValue = 'other';
+
+        // ---------- Layout mode (view) ----------
+        // 'auto'     → mobile if the *device screen* is small, desktop otherwise
+        // 'desktop'  → always desktop layout
+        // 'mobile'   → always mobile layout
+        let layoutMode = 'auto';
+
+        // Auto mode is decided by the physical screen, not the browser window,
+        // so resizing a desktop window never flips the layout. The shortest
+        // screen edge is used so a phone stays "mobile" in landscape too.
+        const MOBILE_SCREEN_BREAKPOINT = 700;
+        let lastAppliedMobile = null;
+
+        // Mobile data-entry style: 'numpad' (default) or 'list'
+        let mobileEntry = 'numpad';
+
+        let layoutOrder = ['params', 'diff', 'hist', 'output'];
+        let layoutVisible = { params: true, diff: true, hist: true, output: true };
+        const SECTION_NAMES = {
+            params: 'Blood Parameters',
+            diff: 'Differential Count',
+            hist: 'Histogram',
+            output: 'Output Preview'
+        };
+
+        const DEFAULT_KEY_MAP = {
+            '0': 'lym', '.': 'band', '1': 'baso', '2': 'eos', '3': 'mono',
+            '4': 'promy', '5': 'mye', '6': 'meta', '7': 'other', '8': 'plasma',
+            '9': 'nRBC', '+': 'blast'
+        };
+        let keyMap = Object.assign({}, DEFAULT_KEY_MAP);
+
+        const DEFAULT_ACTION_KEYS = { toggleMode: '-', reset: '' };
+        let actionKeys = Object.assign({}, DEFAULT_ACTION_KEYS);
+
+        const ACTION_DEFS = [
+            { key: 'toggleMode', label: 'Switch sample type (bone / peripheral)' },
+            { key: 'reset', label: 'Reset all counts' }
+        ];
+
+        let warnBeforeReset = true;
+
+        // ---------- Preferences ----------
+        const PREFS_KEY = 'haemcount.prefs.v1';
+
+        function savePrefs() {
+            try {
+                localStorage.setItem(PREFS_KEY, JSON.stringify({
+                    volume: globalVolume,
+                    theme: currentTheme,
+                    keybinds: keyMap,
+                    actionKeys: actionKeys,
+                    warnBeforeReset: warnBeforeReset,
+                    pauseOnBlur: pauseOnBlur,
+                    chartType: chartType,
+                    layoutMode: layoutMode,
+                    mobileEntry: mobileEntry
+                }));
+            } catch (e) {
+                console.warn('Could not save preferences', e);
+            }
+        }
+
+        function loadPrefs() {
+            let prefs = null;
+            try {
+                const raw = localStorage.getItem(PREFS_KEY);
+                prefs = raw ? JSON.parse(raw) : null;
+            } catch (e) {
+                console.warn('Could not read preferences', e);
+            }
+            if (!prefs || typeof prefs !== 'object') prefs = {};
+
+            const v = parseFloat(prefs.volume);
+            globalVolume = isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5;
+
+            currentTheme = Object.prototype.hasOwnProperty.call(THEMES, prefs.theme) ? prefs.theme : 'light';
+
+            keyMap = Object.assign({}, DEFAULT_KEY_MAP);
+            if (prefs.keybinds && typeof prefs.keybinds === 'object') {
+                const validCells = ALL_CELLS.map(c => c.key);
+                const cleaned = {};
+                Object.keys(prefs.keybinds).forEach(k => {
+                    const cellKey = prefs.keybinds[k];
+                    if (typeof k === 'string' && k.length === 1 && validCells.indexOf(cellKey) !== -1) {
+                        cleaned[k] = cellKey;
+                    }
+                });
+                keyMap = cleaned;
+            }
+
+            actionKeys = Object.assign({}, DEFAULT_ACTION_KEYS);
+            if (prefs.actionKeys && typeof prefs.actionKeys === 'object') {
+                Object.keys(DEFAULT_ACTION_KEYS).forEach(k => {
+                    const val = prefs.actionKeys[k];
+                    if (typeof val === 'string' && (val === '' || val.length === 1)) actionKeys[k] = val;
+                });
+            }
+
+            warnBeforeReset = prefs.warnBeforeReset !== false;
+            pauseOnBlur = !!prefs.pauseOnBlur;
+            chartType = (prefs.chartType === 'pie') ? 'pie' : 'bar';
+
+            layoutMode = (prefs.layoutMode === 'mobile' || prefs.layoutMode === 'desktop')
+                ? prefs.layoutMode
+                : 'auto';
+
+            mobileEntry = (prefs.mobileEntry === 'list') ? 'list' : 'numpad';
+        }
+
+        const SHIFT_MAP = {
+            '!': '1', '@': '2', '#': '3', '$': '4', '%': '5',
+            '^': '6', '&': '7', '*': '8', '(': '9', ')': '0',
+            '>': '.'
+        };
+
+        // ---------- Custom confirm dialog ----------
+        // Replaces native confirm()/alert() so it works reliably in every
+        // environment (some browsers suppress native dialogs inside PWAs or
+        // iframes, which silently breaks reset actions).
+        let confirmResolve = null;
+
+        function showConfirm(message, options) {
+            options = options || {};
+            return new Promise(resolve => {
+                if (confirmResolve) {
+                    const prev = confirmResolve;
+                    confirmResolve = null;
+                    prev(false);
+                }
+                confirmResolve = resolve;
+                document.getElementById('confirmTitle').textContent = options.title || 'Confirm';
+                document.getElementById('confirmMessage').textContent = message;
+                const okBtn = document.getElementById('confirmOkBtn');
+                const cancelBtn = document.getElementById('confirmCancelBtn');
+                okBtn.textContent = options.okText || 'OK';
+                cancelBtn.textContent = options.cancelText || 'Cancel';
+                cancelBtn.style.display = options.hideCancel ? 'none' : '';
+                document.getElementById('confirmModal').classList.add('open');
+            });
+        }
+
+        function closeConfirmModal(result) {
+            document.getElementById('confirmModal').classList.remove('open');
+            if (confirmResolve) {
+                const r = confirmResolve;
+                confirmResolve = null;
+                r(result);
+            }
+        }
+
+        document.getElementById('confirmOkBtn').addEventListener('click', () => closeConfirmModal(true));
+        document.getElementById('confirmCancelBtn').addEventListener('click', () => closeConfirmModal(false));
+        document.getElementById('confirmModal').addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) closeConfirmModal(false);
+        });
+
+        // ---------- Backlog storage ----------
+        const BACKLOG_KEY = 'haemcount.backlog.v1';
+
+        function readBacklog() {
+            try {
+                const raw = localStorage.getItem(BACKLOG_KEY);
+                if (!raw) return [];
+                const arr = JSON.parse(raw);
+                return Array.isArray(arr) ? arr : [];
+            } catch (e) {
+                console.warn('Could not read backlog', e);
+                return [];
+            }
+        }
+
+        function writeBacklog(arr) {
+            try {
+                localStorage.setItem(BACKLOG_KEY, JSON.stringify(arr));
+                return true;
+            } catch (e) {
+                console.warn('Could not write backlog', e);
+                showToast('Could not save backlog');
+                return false;
+            }
+        }
+
+        function computeEntryTotal(entry) {
+            let total = 0;
+            const c = entry.counts || {};
+            ALL_CELLS.forEach(cell => {
+                if (entry.mode === 'peripheral' && cell.key === 'nRBC') return;
+                total += c[cell.key] || 0;
+            });
+            return total;
+        }
+
+        function openBacklog() {
+            renderBacklogList();
+            const input = document.getElementById('backlogLabelInput');
+            if (input) {
+                const backlog = readBacklog();
+                input.value = '';
+                input.placeholder = `Label (e.g., Sample ${backlog.length + 1})`;
+            }
+            openModal('backlogModal');
+        }
+
+        function saveCurrentToBacklog() {
+            const input = document.getElementById('backlogLabelInput');
+            if (!input) return;
+            let label = (input.value || '').trim();
+            const backlog = readBacklog();
+            if (!label) label = `Sample ${backlog.length + 1}`;
+
+            const entry = {
+                id: 'b' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+                label: label,
+                savedAt: new Date().toISOString(),
+                counts: Object.assign({}, counts),
+                mode: mode,
+                otherLabel: otherLabelValue,
+                params: {
+                    hgb: document.getElementById('hgb').value,
+                    mcv: document.getElementById('mcv').value,
+                    wbc: document.getElementById('wbc').value,
+                    plt: document.getElementById('plt').value
+                }
+            };
+            backlog.unshift(entry);
+            if (!writeBacklog(backlog)) return;
+            input.value = '';
+            input.placeholder = `Label (e.g., Sample ${backlog.length + 1})`;
+            renderBacklogList();
+            showToast(`Saved "${entry.label}"`);
+        }
+
+        async function loadBacklogEntry(id) {
+            const backlog = readBacklog();
+            const entry = backlog.find(e => e.id === id);
+            if (!entry) return;
+            const ok = await showConfirm(
+                `Load "${entry.label}"?\n\nThis will replace the current counts and parameters.`,
+                { title: 'Load Entry', okText: 'Load' }
+            );
+            if (!ok) return;
+
+            ALL_CELLS.forEach(c => { counts[c.key] = (entry.counts && entry.counts[c.key]) || 0; });
+
+            mode = (entry.mode === 'bone') ? 'bone' : 'peripheral';
+            otherLabelValue = entry.otherLabel || 'other';
+
+            const p = entry.params || {};
+            ['hgb', 'mcv', 'wbc', 'plt'].forEach(k => {
+                if (p[k] !== undefined && p[k] !== null && p[k] !== '') {
+                    const el = document.getElementById(k);
+                    if (el) el.value = p[k];
+                }
+            });
+
+            renderDiffGrid();
+            updateAll();
+            closeModal('backlogModal');
+            showToast(`Loaded "${entry.label}"`);
+        }
+
+        async function deleteBacklogEntry(id) {
+            const backlog = readBacklog();
+            const entry = backlog.find(e => e.id === id);
+            if (!entry) return;
+            const ok = await showConfirm(`Delete "${entry.label}"?`, { title: 'Delete Entry', okText: 'Delete' });
+            if (!ok) return;
+            writeBacklog(backlog.filter(e => e.id !== id));
+            renderBacklogList();
+            showToast('Entry deleted');
+        }
+
+        async function confirmClearBacklog() {
+            const backlog = readBacklog();
+            if (backlog.length === 0) { showToast('Backlog already empty'); return; }
+            const ok = await showConfirm(
+                'Delete all backlog entries?\n\nThis cannot be undone.',
+                { title: 'Clear Backlog', okText: 'Clear All' }
+            );
+            if (!ok) return;
+            writeBacklog([]);
+            renderBacklogList();
+            showToast('Backlog cleared');
+        }
+
+        function renderBacklogList() {
+            const container = document.getElementById('backlogList');
+            if (!container) return;
+            const backlog = readBacklog();
+
+            if (backlog.length === 0) {
+                container.innerHTML = '<div class="backlog-empty">No saved entries yet.</div>';
+                return;
+            }
+
+            container.innerHTML = '';
+            backlog.forEach(entry => {
+                const total = computeEntryTotal(entry);
+                const dt = new Date(entry.savedAt);
+                const timeStr = isNaN(dt.getTime()) ? '' : dt.toLocaleString();
+                const modeStr = (entry.mode === 'bone') ? 'Bone marrow' : 'Peripheral blood';
+
+                const item = document.createElement('div');
+                item.className = 'backlog-item';
+
+                const info = document.createElement('div');
+                info.className = 'info';
+                const lbl = document.createElement('div');
+                lbl.className = 'label';
+                lbl.textContent = entry.label;
+                lbl.title = entry.label;
+                const meta = document.createElement('div');
+                meta.className = 'meta';
+                meta.textContent = `${timeStr}  •  ${total} cells  •  ${modeStr}`;
+                info.appendChild(lbl);
+                info.appendChild(meta);
+
+                const loadBtn = document.createElement('button');
+                loadBtn.textContent = 'Load';
+                loadBtn.title = 'Load this entry';
+                loadBtn.onclick = () => loadBacklogEntry(entry.id);
+
+                const delBtn = document.createElement('button');
+                delBtn.className = 'secondary';
+                delBtn.textContent = '✕';
+                delBtn.title = 'Delete this entry';
+                delBtn.onclick = () => deleteBacklogEntry(entry.id);
+
+                item.appendChild(info);
+                item.appendChild(loadBtn);
+                item.appendChild(delBtn);
+                container.appendChild(item);
+            });
+        }
+
+        // ---------- Audio ----------
+        function initAudio() {
+            if (!audioCtx) {
+                try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+                catch (e) { console.warn('Web Audio not supported', e); }
+            }
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playBeep(freq, duration, vol) {
+            if (!audioCtx || vol <= 0) return;
+            try {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime);
+                gain.gain.setValueAtTime(vol, audioCtx.currentTime + duration * 0.6);
+                gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch (e) { console.warn('Audio playback failed', e); }
+        }
+
+        function playSound(type) {
+            if (globalVolume <= 0) return;
+            const custom = customSounds[type];
+            if (custom && custom.url) {
+                const audio = new Audio(custom.url);
+                audio.volume = globalVolume;
+                audio.play().catch(e => console.warn('Custom sound playback failed', e));
+            } else {
+                initAudio();
+                if (type === 'normal') playBeep(800, 0.05, globalVolume);
+                else playBeep(1200, 0.35, globalVolume);
+            }
+        }
+
+        // ---------- Custom sound persistence ----------
+        const SOUND_DB_NAME = 'haemcount.sounds';
+        const SOUND_STORE = 'sounds';
+        const SOUND_LS_PREFIX = 'haemcount.sound.';
+        const SOUND_TYPES = ['normal', 'century'];
+
+        let soundDBPromise = null;
+
+        function openSoundDB() {
+            if (!soundDBPromise) {
+                soundDBPromise = new Promise((resolve, reject) => {
+                    if (!window.indexedDB) { reject(new Error('IndexedDB unavailable')); return; }
+                    const req = indexedDB.open(SOUND_DB_NAME, 1);
+                    req.onupgradeneeded = () => {
+                        const db = req.result;
+                        if (!db.objectStoreNames.contains(SOUND_STORE)) db.createObjectStore(SOUND_STORE);
+                    };
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error || new Error('Could not open sound database'));
+                });
+            }
+            return soundDBPromise;
+        }
+
+        function soundStore(mode, action) {
+            return openSoundDB().then(db => new Promise((resolve, reject) => {
+                const tx = db.transaction(SOUND_STORE, mode);
+                const request = action(tx.objectStore(SOUND_STORE));
+                tx.oncomplete = () => resolve(request ? request.result : undefined);
+                tx.onerror = () => reject(tx.error || new Error('Sound storage error'));
+                tx.onabort = () => reject(tx.error || new Error('Sound storage aborted'));
+            }));
+        }
+
+        function readFileAsDataURL(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = () => reject(reader.error || new Error('Could not read file'));
+                reader.readAsDataURL(file);
+            });
+        }
+
+        async function persistSound(type, file) {
+            try {
+                await soundStore('readwrite', store => store.put(file, type));
+                try { localStorage.removeItem(SOUND_LS_PREFIX + type); } catch (e) { }
+                return;
+            } catch (e) {
+                console.warn('IndexedDB unavailable for sounds, using localStorage', e);
+            }
+            const dataUrl = await readFileAsDataURL(file);
+            localStorage.setItem(SOUND_LS_PREFIX + type, dataUrl);
+        }
+
+        async function dropSound(type) {
+            try { await soundStore('readwrite', store => store.delete(type)); } catch (e) { }
+            try { localStorage.removeItem(SOUND_LS_PREFIX + type); } catch (e) { }
+        }
+
+        function setCustomSound(type, url, name) {
+            const prev = customSounds[type];
+            if (prev && prev.url && prev.url.indexOf('blob:') === 0) {
+                URL.revokeObjectURL(prev.url);
+            }
+            customSounds[type] = url ? { url: url, name: name || 'Custom sound' } : null;
+            updateSoundStatus(type);
+        }
+
+        function updateSoundStatus(type) {
+            const el = document.getElementById('soundStatus-' + type);
+            if (!el) return;
+            const s = customSounds[type];
+            if (s) {
+                el.textContent = 'Saved: ' + s.name;
+                el.title = s.name;
+                el.classList.add('has-custom');
+            } else {
+                el.textContent = 'Default beep';
+                el.title = '';
+                el.classList.remove('has-custom');
+            }
+        }
+
+        async function restoreSounds() {
+            for (const type of SOUND_TYPES) {
+                let url = null;
+                let name = '';
+
+                try {
+                    const blob = await soundStore('readonly', store => store.get(type));
+                    if (blob) {
+                        url = URL.createObjectURL(blob);
+                        name = blob.name || 'Custom sound';
+                    }
+                } catch (e) { }
+
+                if (!url) {
+                    try {
+                        const dataUrl = localStorage.getItem(SOUND_LS_PREFIX + type);
+                        if (dataUrl) { url = dataUrl; name = 'Custom sound'; }
+                    } catch (e) { }
+                }
+
+                if (url) setCustomSound(type, url, name);
+                else updateSoundStatus(type);
+            }
+        }
+
+        async function loadSound(input, type) {
+            const file = input.files && input.files[0];
+            if (!file) return;
+
+            setCustomSound(type, URL.createObjectURL(file), file.name);
+
+            try {
+                await persistSound(type, file);
+                showToast(`Custom ${type} sound saved`);
+            } catch (e) {
+                console.warn('Could not persist custom sound', e);
+                showToast('Sound too large to save — active for this session only');
+            }
+            input.value = '';
+        }
+
+        function testSound(type) { playSound(type); }
+
+        async function resetSound(type) {
+            setCustomSound(type, null, '');
+            await dropSound(type);
+            showToast(`Reset ${type} sound`);
+        }
+
+        document.addEventListener('click', function initOnce() {
+            initAudio();
+            document.removeEventListener('click', initOnce);
+        }, { once: true });
+
+        // ---------- Pause on window blur ----------
+        let paused = false;
+        let pauseOnBlur = false;
+        let nativeDialogOpen = false;
+        let nativeDialogClosedAt = 0;
+
+        function pauseCounting() {
+            if (paused) return;
+            paused = true;
+            document.body.classList.add('paused');
+            const ov = document.getElementById('pauseOverlay');
+            if (ov) ov.classList.add('show');
+        }
+
+        function resumeCounting() {
+            const wasPaused = paused;
+            paused = false;
+            document.body.classList.remove('paused');
+            const ov = document.getElementById('pauseOverlay');
+            if (ov) ov.classList.remove('show');
+            if (wasPaused) showToast('Counting resumed');
+        }
+
+        function withNativeDialog(fn) {
+            nativeDialogOpen = true;
+            let result;
+            try {
+                result = fn();
+            } finally {
+                nativeDialogClosedAt = Date.now();
+                nativeDialogOpen = false;
+            }
+            return result;
+        }
+
+        window.addEventListener('blur', () => {
+            if (!pauseOnBlur) return;
+            setTimeout(() => {
+                if (!pauseOnBlur) return;
+                if (document.hasFocus()) return;
+                if (document.querySelector('.modal.open')) return;
+                if (nativeDialogOpen) return;
+                if (Date.now() - nativeDialogClosedAt < 1200) return;
+                pauseCounting();
+            }, 150);
+        });
+
+        window.addEventListener('focus', () => {
+            if (paused) resumeCounting();
+        });
+
+        document.addEventListener('visibilitychange', () => {
+            if (!pauseOnBlur) return;
+            if (document.hidden) pauseCounting();
+        });
+
+        // ---------- Unsaved-work guard ----------
+        let bypassUnloadWarning = false;
+
+        function hasCountedCells() {
+            return ALL_CELLS.some(c => (counts[c.key] || 0) > 0);
+        }
+
+        window.addEventListener('beforeunload', (e) => {
+            if (bypassUnloadWarning) return;
+            if (!warnBeforeReset) return;
+            if (!hasCountedCells()) return;
+            e.preventDefault();
+            e.returnValue = '';
+            return '';
+        });
+
+        // ---------- First-visit hint ----------
+        const HINT_KEY = 'haemcount.otherHintSeen.v1';
+
+        let hintEl = null;
+        let hintTarget = null;
+        let hintTimer = null;
+
+        function otherHintSeen() {
+            try { return localStorage.getItem(HINT_KEY) === '1'; }
+            catch (e) { return false; }
+        }
+
+        function markOtherHintSeen() {
+            try { localStorage.setItem(HINT_KEY, '1'); } catch (e) { }
+        }
+
+        function maybeShowOtherHint() {
+            if (otherHintSeen()) return;
+            if (!layoutVisible.diff) return;
+            // The editable label lives in the list view only; skip on mobile numpad.
+            if (isMobileView() && mobileEntry === 'numpad') return;
+            const target = document.querySelector('.diff-cell .editable-label');
+            if (!target || !target.isConnected) return;
+            if (!target.getBoundingClientRect().width) return;
+            showOtherHint(target);
+        }
+
+        function showOtherHint(target) {
+            hideOtherHint(false);
+
+            hintTarget = target;
+            target.classList.add('hint-target');
+
+            hintEl = document.createElement('div');
+            hintEl.className = 'hint-bubble';
+            hintEl.innerHTML =
+                '<div>Tip: this name is editable — click to rename it.</div>' +
+                '<button type="button" class="hint-btn">Got it</button>' +
+                '<span class="hint-arrow"></span>';
+            document.body.appendChild(hintEl);
+
+            hintEl.querySelector('.hint-btn')
+                .addEventListener('click', () => hideOtherHint(true));
+
+            positionOtherHint();
+
+            hintTimer = setTimeout(() => hideOtherHint(true), 12000);
+
+            window.addEventListener('resize', positionOtherHint);
+            window.addEventListener('scroll', positionOtherHint, true);
+            document.addEventListener('click', onHintOutsideClick, true);
+            document.addEventListener('keydown', onHintKey, true);
+        }
+
+        function positionOtherHint() {
+            if (!hintEl || !hintTarget || !hintTarget.isConnected) return;
+
+            const r = hintTarget.getBoundingClientRect();
+            const b = hintEl.getBoundingClientRect();
+            const gap = 12;
+
+            let top = r.top - b.height - gap;
+            const below = top < 6;
+            if (below) top = r.bottom + gap;
+
+            let left = r.left + r.width / 2 - b.width / 2;
+            left = Math.max(8, Math.min(left, window.innerWidth - b.width - 8));
+
+            hintEl.style.top = top + 'px';
+            hintEl.style.left = left + 'px';
+            hintEl.classList.toggle('below', below);
+
+            const arrowX = r.left + r.width / 2 - left;
+            hintEl.style.setProperty('--arrow-x', arrowX + 'px');
+        }
+
+        function hideOtherHint(remember) {
+            if (hintTimer) { clearTimeout(hintTimer); hintTimer = null; }
+
+            window.removeEventListener('resize', positionOtherHint);
+            window.removeEventListener('scroll', positionOtherHint, true);
+            document.removeEventListener('click', onHintOutsideClick, true);
+            document.removeEventListener('keydown', onHintKey, true);
+
+            if (hintTarget) hintTarget.classList.remove('hint-target');
+            hintTarget = null;
+
+            if (hintEl) { hintEl.remove(); hintEl = null; }
+
+            if (remember) markOtherHintSeen();
+        }
+
+        function onHintOutsideClick(e) {
+            if (hintEl && hintEl.contains(e.target)) return;
+            hideOtherHint(true);
+        }
+
+        function onHintKey(e) {
+            if (e.key === 'Escape' || e.key === 'Enter') hideOtherHint(true);
+        }
+
+        // ---------- Layout mode (view) ----------
+        // Returns the shortest edge of the physical screen in CSS pixels.
+        // screen.width/height can be undefined on a few odd embedded
+        // browsers, hence the fallbacks.
+        function deviceShortestEdge() {
+            const s = window.screen || {};
+            const w = Number(s.width) || window.innerWidth || 0;
+            const h = Number(s.height) || window.innerHeight || 0;
+            return Math.min(w, h);
+        }
+
+        function isMobileView() {
+            if (layoutMode === 'mobile') return true;
+            if (layoutMode === 'desktop') return false;
+            return deviceShortestEdge() < MOBILE_SCREEN_BREAKPOINT;
+        }
+
+        function applyLayoutMode(force) {
+            const mobile = isMobileView();
+            if (!force && mobile === lastAppliedMobile) return;
+            lastAppliedMobile = mobile;
+
+            document.body.classList.toggle('layout-mobile', mobile);
+            document.body.classList.toggle('layout-desktop', !mobile);
+
+            // The histogram must be rebuilt after the layout class changes,
+            // because its container dimensions change with the CSS.
+            if (chart) {
+                chart.destroy();
+                chart = null;
+                setTimeout(updateHistogram, 60);
+            }
+        }
+
+        function setLayoutMode(mode) {
+            layoutMode = (mode === 'mobile' || mode === 'desktop') ? mode : 'auto';
+            savePrefs();
+            applyLayoutMode(true);
+        }
+
+        // ---------- Themes ----------
+        function applyTheme(name) {
+            const t = THEMES[name] || THEMES.light;
+            currentTheme = THEMES[name] ? name : 'light';
+            const r = document.documentElement;
+            r.style.setProperty('--bg', t.bg);
+            r.style.setProperty('--panel', t.panel);
+            r.style.setProperty('--border', t.border);
+            r.style.setProperty('--accent', t.accent);
+            r.style.setProperty('--danger', t.danger);
+            r.style.setProperty('--text', t.text);
+            r.style.setProperty('--muted', t.muted);
+            r.style.setProperty('--titlebar', t.titlebar);
+            r.style.setProperty('--titlebar-text', t.titlebarText);
+            r.style.setProperty('--menu-bg', t.menuBg);
+            r.style.setProperty('--input-bg', t.inputBg);
+            r.style.setProperty('--toast-bg', t.toastBg);
+            r.style.setProperty('--toast-text', t.toastText);
+            if (chart) updateHistogram();
+            savePrefs();
+        }
+
+        // ---------- Core ----------
+        function initCounts() {
+            counts = {};
+            ALL_CELLS.forEach(c => counts[c.key] = 0);
+        }
+
+        function getKeyForCell(cellKey) {
+            for (const [k, v] of Object.entries(keyMap)) {
+                if (v === cellKey) return k;
+            }
+            return '';
+        }
+
+        function capitalize(s) {
+            return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+        }
+
+        function escapeHtml(s) {
+            return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            }[c]));
+        }
+
+        function isBoneMarrow() { return mode === 'bone'; }
+
+        function getCellDisplayName(cell) {
+            if (cell.key === 'nRBC' && isBoneMarrow()) return 'Erythroid';
+            return cell.dispName;
+        }
+
+        function getCellShortName(cell) {
+            if (cell.key === 'nRBC' && isBoneMarrow()) return 'Erythroid';
+            return cell.short;
+        }
+
+        function getCellPluralName(cell) {
+            if (cell.key === 'nRBC' && isBoneMarrow()) return 'erythroid cells';
+            return cell.name;
+        }
+
+        function getCellColor(cell) {
+            return CELL_COLORS[cell.key] || FALLBACK_PIE_COLOR;
+        }
+
+        function getCellLabelHTML(cell) {
+            const k = getKeyForCell(cell.key);
+            const keySuffix = k ? ` (${escapeHtml(k)})` : '';
+            if (cell.key === 'other') {
+                const name = capitalize(otherLabelValue || 'other');
+                return `<span class="editable-label" contenteditable="true" spellcheck="false"` +
+                    ` title="Click to rename this category"` +
+                    ` onfocus="this.select()"` +
+                    ` onkeydown="handleOtherLabelKey(event, this)"` +
+                    ` onblur="commitOtherLabel(this)">${escapeHtml(name)}</span>` +
+                    keySuffix;
+            }
+            return escapeHtml(getCellDisplayName(cell)) + keySuffix;
+        }
+
+        function renderDiffGrid() {
+            if (hintEl) hideOtherHint(true);
+            const grid = document.getElementById('diffGrid');
+            grid.innerHTML = '';
+            ALL_CELLS.forEach(cell => {
+                const div = document.createElement('div');
+                div.className = 'diff-cell';
+                div.innerHTML = `
+            <span class="cell-label" title="${escapeHtml(getCellDisplayName(cell))}">${getCellLabelHTML(cell)}</span>
+            <div class="count-wrap">
+                <span class="count-box"
+                      contenteditable="true"
+                      inputmode="numeric"
+                      title="Click to type a value"
+                      id="cnt-${cell.key}"
+                      onfocus="this.select()"
+                      onblur="commitCount('${cell.key}', this)"
+                      onkeydown="handleCountKey(event, '${cell.key}', this)">${counts[cell.key] || 0}</span>
+                <div class="spinner">
+                    <button class="up" onclick="change('${cell.key}', 1)" title="Increment">▲</button>
+                    <button class="down" onclick="change('${cell.key}', -1)" title="Decrement">▼</button>
+                </div>
+            </div>
+            <span class="pct" id="pct-${cell.key}">0%</span>
+        `;
+                grid.appendChild(div);
+            });
+
+            grid.appendChild(buildNumpadCell());
+            grid.appendChild(buildModeCell());
+            applyMobileEntry();
+        }
+
+        function buildModeCell() {
+            const modeDiv = document.createElement('div');
+            modeDiv.className = 'mode-cell';
+            modeDiv.innerHTML = `
+        <label><input type="radio" name="mode" value="bone" ${mode === 'bone' ? 'checked' : ''} onchange="changeSampleType('bone')"> Bone marrow</label>
+        <label><input type="radio" name="mode" value="peripheral" ${mode === 'peripheral' ? 'checked' : ''} onchange="changeSampleType('peripheral')"> Peripheral blood</label>
+        <div class="ratio" id="ratioBox" style="display:none;">M:E ratio: <strong id="meRatio">—</strong></div>
+        <div class="entry-toggle">
+            <button type="button" data-entry="numpad">Numpad</button>
+            <button type="button" data-entry="list">List</button>
+        </div>
+    `;
+            modeDiv.querySelectorAll('.entry-toggle button').forEach(btn => {
+                btn.addEventListener('click', () => setMobileEntry(btn.dataset.entry));
+            });
+            return modeDiv;
+        }
+
+        // ---------- Mobile numpad ----------
+        // The numpad mirrors a physical numeric keypad. Each cell is placed in
+        // the slot that matches its assigned keybind, so the on-screen layout
+        // stays consistent with muscle memory:
+        //
+        //     7 8 9
+        //     4 5 6
+        //     1 2 3
+        //     0 . +
+        //
+        const NUMPAD_POSITIONS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '0', '.', '+'];
+
+        function contrastText(hex) {
+            const h = String(hex || '').replace('#', '');
+            if (h.length !== 6) return '#ffffff';
+            const r = parseInt(h.slice(0, 2), 16);
+            const g = parseInt(h.slice(2, 4), 16);
+            const b = parseInt(h.slice(4, 6), 16);
+            const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+            return lum > 0.62 ? '#101010' : '#ffffff';
+        }
+
+        function numpadCellLabel(cell) {
+            if (cell.key === 'other') return capitalize(otherLabelValue || 'other');
+            return getCellDisplayName(cell);
+        }
+
+        function createNumpadButton(cell, keyLabel) {
+            const color = getCellColor(cell);
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'np-btn';
+            btn.dataset.cell = cell.key;
+            btn.style.setProperty('--np-color', color);
+            btn.style.setProperty('--np-text', contrastText(color));
+            btn.title = getCellDisplayName(cell);
+            btn.innerHTML =
+                (keyLabel ? `<span class="np-key">${escapeHtml(keyLabel)}</span>` : '') +
+                `<span class="np-count">${counts[cell.key] || 0}</span>` +
+                `<span class="np-name"${cell.key === 'other' ? ' data-np-label="other"' : ''}>` +
+                `${escapeHtml(numpadCellLabel(cell))}</span>`;
+
+            btn.addEventListener('pointerdown', () => npPressStart(btn, cell.key));
+            btn.addEventListener('pointerup', () => npPressEnd(btn));
+            btn.addEventListener('pointerleave', () => npPressEnd(btn));
+            btn.addEventListener('pointercancel', () => npPressEnd(btn));
+            btn.addEventListener('click', () => npPressCommit(btn, cell.key));
+            btn.addEventListener('contextmenu', e => e.preventDefault());
+
+            return btn;
+        }
+
+        function buildNumpadCell() {
+            const wrap = document.createElement('div');
+            wrap.className = 'numpad-cell';
+
+            const head = document.createElement('div');
+            head.className = 'numpad-head';
+            head.innerHTML =
+                '<span class="numpad-total" id="numpadTotal">0 cells</span>' +
+                '<span class="numpad-hint">Tap +1 · Hold −1</span>';
+            wrap.appendChild(head);
+
+            const npGrid = document.createElement('div');
+            npGrid.className = 'numpad-grid';
+
+            // Reverse map: keyboard key → cell key
+            const keyToCell = {};
+            Object.keys(keyMap).forEach(k => { keyToCell[k] = keyMap[k]; });
+
+            const placedCellKeys = new Set();
+            const usedSlots = new Set();
+
+            // 1) Place each cell at its matching numpad slot, if it has one.
+            NUMPAD_POSITIONS.forEach(npKey => {
+                const cellKey = keyToCell[npKey];
+                if (!cellKey || placedCellKeys.has(cellKey)) return;
+                const cell = ALL_CELLS.find(c => c.key === cellKey);
+                if (!cell) return;
+                npGrid.appendChild(createNumpadButton(cell, npKey));
+                placedCellKeys.add(cellKey);
+                usedSlots.add(npKey);
+            });
+
+            // 2) Any remaining cells (e.g. custom keybinds outside the numpad
+            //    set) fill the still-empty numpad slots in order.
+            const remaining = ALL_CELLS.filter(c => !placedCellKeys.has(c.key));
+            NUMPAD_POSITIONS.forEach(npKey => {
+                if (usedSlots.has(npKey) || remaining.length === 0) return;
+                const cell = remaining.shift();
+                const label = getKeyForCell(cell.key);
+                npGrid.appendChild(createNumpadButton(cell, label));
+                placedCellKeys.add(cell.key);
+                usedSlots.add(npKey);
+            });
+
+            // 3) Safety net: with 12 cells and 12 slots this should never run.
+            remaining.forEach(cell => {
+                npGrid.appendChild(createNumpadButton(cell, getKeyForCell(cell.key)));
+            });
+
+            wrap.appendChild(npGrid);
+            return wrap;
+        }
+
+        function npPressStart(btn, key) {
+            btn.dataset.lp = '0';
+            clearTimeout(btn._lpTimer);
+            btn._lpTimer = setTimeout(() => {
+                btn.dataset.lp = '1';
+                change(key, -1);
+            }, 480);
+        }
+
+        function npPressEnd(btn) {
+            clearTimeout(btn._lpTimer);
+        }
+
+        function npPressCommit(btn, key) {
+            if (btn.dataset.lp === '1') { btn.dataset.lp = '0'; return; }
+            change(key, 1);
+        }
+
+        function updateNumpad() {
+            const totalEl = document.getElementById('numpadTotal');
+            if (totalEl) totalEl.textContent = `${getTotal()} cells`;
+
+            ALL_CELLS.forEach(cell => {
+                const btn = document.querySelector(`.np-btn[data-cell="${cell.key}"]`);
+                if (!btn) return;
+                const n = counts[cell.key] || 0;
+                const countEl = btn.querySelector('.np-count');
+                if (countEl) countEl.textContent = n;
+                btn.classList.toggle('has-count', n > 0);
+
+                if (cell.key === 'other') {
+                    const lbl = btn.querySelector('.np-name');
+                    if (lbl) lbl.textContent = capitalize(otherLabelValue || 'other');
+                }
+            });
+        }
+
+        function setMobileEntry(val) {
+            mobileEntry = (val === 'list') ? 'list' : 'numpad';
+            applyMobileEntry();
+            savePrefs();
+        }
+
+        function applyMobileEntry() {
+            document.body.classList.toggle('mobile-list', mobileEntry === 'list');
+            document.querySelectorAll('.entry-toggle button').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.entry === mobileEntry);
+            });
+        }
+
+        function handleCountKey(e, cellKey, el) {
+            if (e.key === 'Enter') { e.preventDefault(); el.blur(); }
+            else if (e.key === 'Escape') {
+                e.preventDefault();
+                el.textContent = counts[cellKey] || 0;
+                el.blur();
+            }
+        }
+
+        function commitCount(cellKey, el) {
+            const val = Math.max(0, parseInt(el.textContent.trim().replace(/[^0-9-]/g, '')) || 0);
+            counts[cellKey] = val;
+            el.textContent = val;
+            updateAll();
+        }
+
+        function handleOtherLabelKey(e, el) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                el.blur();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                el.textContent = capitalize(otherLabelValue || 'other');
+                el.blur();
+            }
+        }
+
+        function commitOtherLabel(el) {
+            let val = (el.textContent || '').replace(/\s+/g, ' ').trim();
+            if (!val) val = 'other';
+            if (val.length > 32) val = val.slice(0, 32);
+            otherLabelValue = val;
+            el.textContent = capitalize(val);
+            updateOutput();
+            updateNumpad();
+        }
+
+        function getTotal() {
+            let total = 0;
+            ALL_CELLS.forEach(c => {
+                if (mode === 'peripheral' && c.key === 'nRBC') return;
+                total += counts[c.key] || 0;
+            });
+            return total;
+        }
+
+        function change(key, delta) {
+            if (paused) return;
+            if (delta < 0 && counts[key] <= 0) return;
+            counts[key] = (counts[key] || 0) + delta;
+            if (delta > 0) {
+                initAudio();
+                const total = getTotal();
+                if (total > 0 && total % 100 === 0) playSound('century');
+                else playSound('normal');
+            }
+            updateAll();
+        }
+
+        function updateAll() {
+            const total = getTotal();
+            ALL_CELLS.forEach(cell => {
+                const cntEl = document.getElementById(`cnt-${cell.key}`);
+                const pctEl = document.getElementById(`pct-${cell.key}`);
+                if (cntEl && document.activeElement !== cntEl) cntEl.textContent = counts[cell.key] || 0;
+                if (pctEl) {
+                    const pct = total > 0 ? ((counts[cell.key] || 0) / total * 100) : 0;
+                    pctEl.textContent = pct.toFixed(0) + '%';
+                }
+            });
+            document.getElementById('totalCount').textContent = total;
+
+            const ratioBox = document.getElementById('ratioBox');
+            if (ratioBox) {
+                if (mode === 'bone') {
+                    ratioBox.style.display = 'block';
+                    let myeloid = 0, erythroid = 0;
+                    ALL_CELLS.forEach(c => {
+                        if (c.type === 'myeloid') myeloid += counts[c.key] || 0;
+                        if (c.type === 'erythroid') erythroid += counts[c.key] || 0;
+                    });
+                    const ratio = erythroid > 0 ? (myeloid / erythroid).toFixed(2) : '—';
+                    document.getElementById('meRatio').textContent = erythroid > 0 ? `${ratio}:1` : '—';
+                } else {
+                    ratioBox.style.display = 'none';
+                }
+            }
+
+            updateNumpad();
+            updateHistogram();
+            updateOutput();
+        }
+
+        function updateHistogram() {
+            const histSection = document.querySelector('[data-section="hist"]');
+            if (histSection) histSection.classList.toggle('chart-pie', chartType === 'pie');
+            if (!histSection || histSection.style.display === 'none') return;
+            const canvas = document.getElementById('histChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const t = THEMES[currentTheme] || THEMES.light;
+
+            if (chart) chart.destroy();
+
+            if (chartType === 'pie') {
+                const pieCells = PIE_ORDER.map(k => ALL_CELLS.find(c => c.key === k));
+                const items = pieCells
+                    .map(c => ({ cell: c, value: counts[c.key] || 0, color: getCellColor(c) }))
+                    .filter(it => it.value > 0);
+
+                if (items.length === 0) {
+                    chart = new Chart(ctx, {
+                        type: 'pie',
+                        data: {
+                            labels: ['No cells counted'],
+                            datasets: [{ data: [1], backgroundColor: [t.border], borderWidth: 0 }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            animation: false,
+                            plugins: { legend: { display: false }, tooltip: { enabled: false } }
+                        }
+                    });
+                    return;
+                }
+
+                chart = new Chart(ctx, {
+                    type: 'pie',
+                    data: {
+                        labels: items.map(it => getCellShortName(it.cell)),
+                        datasets: [{
+                            data: items.map(it => it.value),
+                            backgroundColor: items.map(it => it.color),
+                            borderColor: t.panel,
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        animation: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'right',
+                                labels: {
+                                    font: { size: 8 },
+                                    color: t.text,
+                                    boxWidth: 8,
+                                    boxHeight: 8,
+                                    padding: 3
+                                }
+                            },
+                            tooltip: {
+                                titleFont: { size: 10 },
+                                bodyFont: { size: 10 },
+                                callbacks: {
+                                    title: (tooltipItems) => {
+                                        if (!tooltipItems || tooltipItems.length === 0) return '';
+                                        const item = items[tooltipItems[0].dataIndex];
+                                        return item ? getCellDisplayName(item.cell) : '';
+                                    },
+                                    label: (c) => {
+                                        const sum = c.dataset.data.reduce((a, b) => a + b, 0);
+                                        const pct = sum > 0 ? (c.raw / sum * 100).toFixed(1) : '0';
+                                        return `${c.raw} cells (${pct}%)`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+                return;
+            }
+
+            const histCells = HIST_ORDER.map(k => ALL_CELLS.find(c => c.key === k));
+            const labels = histCells.map(c => getCellShortName(c));
+            const data = histCells.map(c => counts[c.key] || 0);
+            const greyBars = histCells.map(() => '#a8a8a8');
+
+            chart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: greyBars,
+                        borderColor: '#888888',
+                        borderWidth: 1,
+                        barPercentage: 0.85,
+                        categoryPercentage: 0.9
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            titleFont: { size: 10 },
+                            bodyFont: { size: 10 },
+                            callbacks: {
+                                title: (tooltipItems) => {
+                                    if (!tooltipItems || tooltipItems.length === 0) return '';
+                                    const cell = histCells[tooltipItems[0].dataIndex];
+                                    return cell ? getCellDisplayName(cell) : '';
+                                },
+                                label: (ctx) => `${ctx.raw} cells`
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 5, font: { size: 9 }, color: t.text, padding: 2 },
+                            grid: { color: t.border, drawTicks: false },
+                            border: { display: true, color: t.border }
+                        },
+                        x: {
+                            ticks: { font: { size: 9 }, color: t.text, padding: 2 },
+                            grid: { display: false },
+                            border: { display: true, color: t.border }
+                        }
+                    },
+                    layout: { padding: { top: 4, right: 6, left: 0, bottom: 0 } }
+                }
+            });
+        }
+
+        // ---------- Output ----------
+        function generateOutput() {
+            const hgb = document.getElementById('hgb').value || '—';
+            const mcv = document.getElementById('mcv').value || '—';
+            const wbc = document.getElementById('wbc').value || '—';
+            const plt = document.getElementById('plt').value || '—';
+
+            const total = getTotal();
+            const isPeripheral = mode === 'peripheral';
+
+            let lines = [];
+            lines.push(`Haemoglobin ${hgb} g/dL, Mean Corpuscular Volume ${mcv} fL, White blood cells ${wbc} x 10^9/L, Platelets ${plt} x 10^9/L`);
+            lines.push('');
+
+            if (total === 0 && counts.nRBC === 0) {
+                lines.push('No differential count recorded.');
+            } else {
+                const outputCells = HIST_ORDER.map(k => ALL_CELLS.find(c => c.key === k));
+                const mainList = isPeripheral
+                    ? outputCells.filter(c => c.key !== 'nRBC')
+                    : outputCells;
+                const nonZero = mainList.filter(c => counts[c.key] > 0);
+
+                if (nonZero.length > 0) {
+                    let diffStr = '';
+                    nonZero.forEach((c, i) => {
+                        const pct = total > 0 ? ((counts[c.key] / total) * 100).toFixed(0) : 0;
+                        const dispName = (c.key === 'other')
+                            ? (otherLabelValue || 'other') + 's'
+                            : getCellPluralName(c);
+                        if (i === 0) diffStr += `${dispName} ${pct}%`;
+                        else if (i === nonZero.length - 1) diffStr += ` and ${dispName} ${pct}%`;
+                        else diffStr += `, ${dispName} ${pct}%`;
+                    });
+                    lines.push(`${total} cell differential count: ${diffStr}`);
+                } else {
+                    lines.push(`${total} cell differential count.`);
+                }
+
+                if (isPeripheral && counts.nRBC > 0) {
+                    const nRBCPer100 = total > 0 ? ((counts.nRBC / total) * 100).toFixed(0) : 0;
+                    lines.push(`nRBCs: ${nRBCPer100} per 100 WBCs`);
+                }
+
+                if (mode === 'bone') {
+                    let myeloid = 0, erythroid = 0;
+                    ALL_CELLS.forEach(c => {
+                        if (c.type === 'myeloid') myeloid += counts[c.key] || 0;
+                        if (c.type === 'erythroid') erythroid += counts[c.key] || 0;
+                    });
+                    if (erythroid > 0) {
+                        lines.push(`Myeloid:Erythroid ratio ${(myeloid / erythroid).toFixed(2)}:1`);
+                    }
+                }
+            }
+
+            return lines.join('\n');
+        }
+
+        function updateOutput() {
+            document.getElementById('outputBox').textContent = generateOutput();
+        }
+
+        // ---------- Clipboard ----------
+        function copyOutput() {
+            const text = generateOutput();
+            navigator.clipboard.writeText(text).then(() => showToast('Copied to clipboard'))
+                .catch(() => {
+                    const ta = document.createElement('textarea');
+                    ta.value = text;
+                    document.body.appendChild(ta);
+                    ta.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(ta);
+                    showToast('Copied to clipboard');
+                });
+        }
+
+        function showToast(msg) {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 1600);
+        }
+
+        // ---------- Reset ----------
+        async function confirmReset() {
+            if (!warnBeforeReset) { resetAll(); return; }
+            const ok = await showConfirm(
+                'Reset all counts and restore the "Other" label?\n\nThis cannot be undone.',
+                { title: 'Reset Counts', okText: 'Reset' }
+            );
+            if (ok) resetAll();
+        }
+
+        function resetAll() {
+            initCounts();
+            otherLabelValue = 'other';
+            applyTheme(currentTheme);
+            renderDiffGrid();
+            updateAll();
+            showToast('Counts reset');
+        }
+
+        // ---------- Modals ----------
+        function openModal(id) {
+            document.getElementById(id).classList.add('open');
+            if (id === 'keysModal') renderKeybinds();
+            if (id === 'preferencesModal') initPreferences();
+            if (id === 'backlogModal') renderBacklogList();
+        }
+        function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+        document.querySelectorAll('.modal').forEach(m => {
+            m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const cm = document.getElementById('confirmModal');
+                if (cm.classList.contains('open')) {
+                    closeConfirmModal(false);
+                    return;
+                }
+                document.querySelectorAll('.modal.open').forEach(m => m.classList.remove('open'));
+            }
+        });
+
+        // ---------- Preferences ----------
+        function initPreferences() {
+            document.getElementById('layoutModeSelect').value = layoutMode;
+            document.getElementById('volumeSlider').value = globalVolume;
+            document.getElementById('volDisplay').textContent = Math.round(globalVolume * 100) + '%';
+            document.getElementById('themeSelect').value = currentTheme;
+            document.getElementById('pauseOnBlurCheck').checked = pauseOnBlur;
+            document.getElementById('warnOnResetCheck').checked = warnBeforeReset;
+            document.getElementById('chartTypeSelect').value = chartType;
+            SOUND_TYPES.forEach(updateSoundStatus);
+            renderLayoutList();
+        }
+
+        function setPauseOnBlur(enabled) {
+            pauseOnBlur = !!enabled;
+            if (!pauseOnBlur && paused) resumeCounting();
+            savePrefs();
+        }
+
+        function setWarnOnReset(enabled) {
+            warnBeforeReset = !!enabled;
+            savePrefs();
+        }
+
+        function setChartType(val) {
+            chartType = (val === 'pie') ? 'pie' : 'bar';
+            savePrefs();
+            updateHistogram();
+        }
+
+        function updateVolume(val) {
+            globalVolume = parseFloat(val);
+            document.getElementById('volDisplay').textContent = Math.round(globalVolume * 100) + '%';
+            savePrefs();
+        }
+
+        // ---------- Layout (panels) ----------
+        function renderLayoutList() {
+            const container = document.getElementById('layoutList');
+            container.innerHTML = '';
+            layoutOrder.forEach((key, idx) => {
+                const row = document.createElement('div');
+                row.className = 'layout-row';
+                row.innerHTML = `
+            <input type="checkbox" ${layoutVisible[key] ? 'checked' : ''}
+                   onchange="toggleSection('${key}', this.checked)">
+            <span>${SECTION_NAMES[key]}</span>
+            <button ${idx === 0 ? 'disabled' : ''} onclick="moveSection('${key}', -1)" title="Move up">↑</button>
+            <button ${idx === layoutOrder.length - 1 ? 'disabled' : ''} onclick="moveSection('${key}', 1)" title="Move down">↓</button>
+        `;
+                container.appendChild(row);
+            });
+        }
+
+        function toggleSection(key, visible) {
+            layoutVisible[key] = visible;
+            applyLayout();
+        }
+
+        function moveSection(key, direction) {
+            const idx = layoutOrder.indexOf(key);
+            const newIdx = idx + direction;
+            if (newIdx < 0 || newIdx >= layoutOrder.length) return;
+            [layoutOrder[idx], layoutOrder[newIdx]] = [layoutOrder[newIdx], layoutOrder[idx]];
+            applyLayout();
+            renderLayoutList();
+        }
+
+        function applyLayout() {
+            const main = document.getElementById('mainArea');
+            const sections = {};
+            main.querySelectorAll('[data-section]').forEach(el => {
+                sections[el.dataset.section] = el;
+                el.remove();
+            });
+            layoutOrder.forEach(key => {
+                const el = sections[key];
+                if (el) {
+                    el.style.display = layoutVisible[key] ? '' : 'none';
+                    main.appendChild(el);
+                }
+            });
+            if (layoutVisible.hist) {
+                setTimeout(() => {
+                    if (chart) { chart.destroy(); chart = null; }
+                    updateHistogram();
+                }, 30);
+            }
+        }
+
+        // ---------- Keybinds ----------
+        function renderKeybinds() {
+            const container = document.getElementById('keybindList');
+            container.innerHTML = '';
+            ALL_CELLS.forEach(cell => {
+                const currentKey = getKeyForCell(cell.key);
+                const row = document.createElement('div');
+                row.className = 'keybind-row';
+                row.innerHTML = `
+            <label>${cell.dispName}</label>
+            <input type="text" maxlength="1" value="${escapeHtml(currentKey)}" data-cell="${cell.key}"
+                   onkeydown="handleKeyInput(event, this)">
+        `;
+                container.appendChild(row);
+            });
+            renderActionKeybinds();
+        }
+
+        function renderActionKeybinds() {
+            const container = document.getElementById('actionKeybindList');
+            if (!container) return;
+            container.innerHTML = '';
+            ACTION_DEFS.forEach(def => {
+                const row = document.createElement('div');
+                row.className = 'keybind-row';
+                row.innerHTML = `
+            <label>${escapeHtml(def.label)}</label>
+            <input type="text" maxlength="1" value="${escapeHtml(actionKeys[def.key] || '')}" data-action="${def.key}"
+                   onkeydown="handleKeyInput(event, this)">
+        `;
+                container.appendChild(row);
+            });
+        }
+
+        function handleKeyInput(e, input) {
+            if (e.key === 'Tab') return;
+            e.preventDefault();
+            if (e.key === 'Backspace') input.value = '';
+            else if (e.key.length === 1) input.value = e.key;
+        }
+
+        function saveKeybinds() {
+            const cellInputs = document.querySelectorAll('#keybindList input');
+            const actionInputs = document.querySelectorAll('#actionKeybindList input');
+            const newKeyMap = {};
+            const newActionKeys = { toggleMode: '', reset: '' };
+            const usedBy = {};
+            let conflictMsg = '';
+
+            function claim(key, owner) {
+                if (usedBy[key]) {
+                    conflictMsg = `Key '${key}' is already assigned to ${usedBy[key]}.`;
+                    return false;
+                }
+                usedBy[key] = owner;
+                return true;
+            }
+
+            cellInputs.forEach(input => {
+                const key = input.value.trim();
+                if (!key) return;
+                const cellKey = input.dataset.cell;
+                const cell = ALL_CELLS.find(c => c.key === cellKey);
+                const owner = cell ? `the ${cell.dispName} cell` : `cell '${cellKey}'`;
+                if (claim(key, owner)) newKeyMap[key] = cellKey;
+            });
+
+            actionInputs.forEach(input => {
+                const key = input.value.trim();
+                if (!key) return;
+                const actionKey = input.dataset.action;
+                const def = ACTION_DEFS.find(d => d.key === actionKey);
+                const owner = def ? `the "${def.label}" action` : `action '${actionKey}'`;
+                if (claim(key, owner)) newActionKeys[actionKey] = key;
+            });
+
+            if (conflictMsg) {
+                showConfirm(conflictMsg, { title: 'Key Conflict', okText: 'OK', hideCancel: true });
+                return;
+            }
+
+            keyMap = newKeyMap;
+            actionKeys = newActionKeys;
+            savePrefs();
+            renderDiffGrid();
+            closeModal('keysModal');
+            showToast('Keybinds saved');
+        }
+
+        async function resetKeybindsToDefault() {
+            const ok = await showConfirm(
+                'Reset all keybinds to their default values?\n\nThis cannot be undone.',
+                { title: 'Reset Keybinds', okText: 'Reset' }
+            );
+            if (!ok) return;
+
+            keyMap = Object.assign({}, DEFAULT_KEY_MAP);
+            actionKeys = Object.assign({}, DEFAULT_ACTION_KEYS);
+
+            savePrefs();
+            renderKeybinds();
+            renderDiffGrid();
+            updateAll();
+
+            // Confirmatory message after the reset
+            await showConfirm(
+                'Keybinds have been reset to their default values.',
+                { title: '✓ Reset Complete', okText: 'OK', hideCancel: true }
+            );
+        }
+
+        // ---------- Keyboard shortcuts ----------
+        document.addEventListener('keydown', (e) => {
+            if (paused) return;
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+            if (e.target.isContentEditable) return;
+            if (document.querySelector('.modal.open')) return;
+
+            if (e.key === 'Enter') { copyOutput(); e.preventDefault(); return; }
+
+            const directCell = keyMap[e.key];
+            if (directCell) { change(directCell, 1); e.preventDefault(); return; }
+
+            for (const def of ACTION_DEFS) {
+                const k = actionKeys[def.key];
+                if (k && e.key === k) { e.preventDefault(); runKeyAction(def.key); return; }
+            }
+
+            if (e.key === '-' && keyMap['+']) {
+                change(keyMap['+'], -1); e.preventDefault(); return;
+            }
+
+            if (e.shiftKey && SHIFT_MAP[e.key]) {
+                const baseKey = SHIFT_MAP[e.key];
+                if (keyMap[baseKey]) { change(keyMap[baseKey], -1); e.preventDefault(); return; }
+            }
+
+            if (e.shiftKey && e.key.length === 1 && e.key >= 'A' && e.key <= 'Z') {
+                const lower = e.key.toLowerCase();
+                if (keyMap[lower] && !keyMap[e.key]) {
+                    change(keyMap[lower], -1);
+                    e.preventDefault();
+                }
+            }
+        });
+
+        function runKeyAction(actionKey) {
+            if (actionKey === 'toggleMode') {
+                const next = (mode === 'bone') ? 'peripheral' : 'bone';
+                changeSampleType(next);
+                showToast(next === 'bone' ? 'Bone marrow mode' : 'Peripheral blood mode');
+            } else if (actionKey === 'reset') {
+                confirmReset();
+            }
+        }
+
+        function changeSampleType(val) {
+            if (mode === val) return;
+            mode = val;
+            renderDiffGrid();
+            updateAll();
+        }
+
+        // ---------- Auto layout on screen change (only when in Auto mode) ----------
+        // Window resizing deliberately does NOT switch the layout any more.
+        // Only a change in the device's screen metrics (moving the window to a
+        // different monitor, device rotation) is considered. The
+        // lastAppliedMobile cache in applyLayoutMode() makes this a no-op when
+        // nothing actually changed, so there is no flicker or needless chart
+        // rebuild while dragging a window around.
+        let resizeTimer = null;
+        function scheduleAutoLayoutCheck(delay) {
+            if (layoutMode !== 'auto') return;
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(() => applyLayoutMode(false), delay);
+        }
+        window.addEventListener('resize', () => scheduleAutoLayoutCheck(150));
+        window.addEventListener('orientationchange', () => scheduleAutoLayoutCheck(250));
+
+        // ---------- Auto-update with state preservation ----------
+        // Online  → check for a new service worker; when one is ready, snapshot
+        //           the current counts/params, activate it, reload, then restore.
+        // Offline → do nothing; the cached app shell is served by the SW.
+        const UPDATE_SNAPSHOT_KEY = 'haemcount.updateSnapshot.v1';
+        const UPDATE_TOAST_KEY = 'haemcount.updateToast.v1';
+
+        let updateInProgress = false;
+        let updateRetries = 0;
+
+        function captureAppState() {
+            return {
+                counts: Object.assign({}, counts),
+                mode: mode,
+                otherLabel: otherLabelValue,
+                params: {
+                    hgb: document.getElementById('hgb').value,
+                    mcv: document.getElementById('mcv').value,
+                    wbc: document.getElementById('wbc').value,
+                    plt: document.getElementById('plt').value
+                },
+                savedAt: Date.now()
+            };
+        }
+
+        function restoreAppState(state) {
+            if (!state || typeof state !== 'object') return false;
+            try {
+                ALL_CELLS.forEach(c => {
+                    const v = state.counts && state.counts[c.key];
+                    counts[c.key] = Number.isFinite(v) ? v : 0;
+                });
+                mode = (state.mode === 'bone') ? 'bone' : 'peripheral';
+                otherLabelValue = (typeof state.otherLabel === 'string' && state.otherLabel)
+                    ? state.otherLabel : 'other';
+                const p = state.params || {};
+                ['hgb', 'mcv', 'wbc', 'plt'].forEach(k => {
+                    if (p[k] !== undefined && p[k] !== null && p[k] !== '') {
+                        const el = document.getElementById(k);
+                        if (el) el.value = p[k];
+                    }
+                });
+                return true;
+            } catch (e) {
+                console.warn('Could not restore app state', e);
+                return false;
+            }
+        }
+
+        function saveUpdateSnapshot() {
+            try {
+                sessionStorage.setItem(UPDATE_SNAPSHOT_KEY, JSON.stringify(captureAppState()));
+                return true;
+            } catch (e) {
+                console.warn('Could not save update snapshot', e);
+                return false;
+            }
+        }
+
+        function loadUpdateSnapshot() {
+            try {
+                const raw = sessionStorage.getItem(UPDATE_SNAPSHOT_KEY);
+                if (!raw) return null;
+                sessionStorage.removeItem(UPDATE_SNAPSHOT_KEY);
+                return JSON.parse(raw);
+            } catch (e) { return null; }
+        }
+
+        function setPendingUpdateToast() {
+            try { sessionStorage.setItem(UPDATE_TOAST_KEY, '1'); } catch (e) {}
+        }
+
+        function consumePendingUpdateToast() {
+            try {
+                if (sessionStorage.getItem(UPDATE_TOAST_KEY) === '1') {
+                    sessionStorage.removeItem(UPDATE_TOAST_KEY);
+                    return true;
+                }
+            } catch (e) {}
+            return false;
+        }
+
+        function performUpdateReload() {
+            if (updateInProgress) return;
+
+            // Don't yank the page out from under a modal the user is working in.
+            // Retry every 5s, giving up after ~60s.
+            if (document.querySelector('.modal.open') && updateRetries < 12) {
+                updateRetries++;
+                setTimeout(performUpdateReload, 5000);
+                return;
+            }
+
+            // Commit any in-progress edit (contenteditable count / Other label)
+            // so it gets captured in the snapshot.
+            if (document.activeElement && document.activeElement.blur) {
+                document.activeElement.blur();
+            }
+
+            updateInProgress = true;
+
+            const ok = saveUpdateSnapshot();
+            if (ok) setPendingUpdateToast();
+
+            // Suppress the "unsaved counts" beforeunload prompt for our own reload.
+            bypassUnloadWarning = true;
+
+            showToast(ok ? 'Updating — your data will be preserved…' : 'Updating…');
+
+            // Let the toast paint before we navigate away.
+            setTimeout(() => location.reload(), 150);
+        }
+
+        async function setupAutoUpdate() {
+            if (!('serviceWorker' in navigator)) return;
+
+            // Whether this page was already controlled by an SW when it loaded.
+            // Only a *replacement* SW should trigger a reload; the very first
+            // install must not.
+            const hadControllerAtStartup = !!navigator.serviceWorker.controller;
+
+            let reg;
+            try {
+                reg = await navigator.serviceWorker.register('/sw.js');
+            } catch (err) {
+                console.warn('Service worker registration failed', err);
+                return;
+            }
+
+            let reloadScheduled = false;
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (reloadScheduled) return;
+                if (!navigator.serviceWorker.controller) return;
+                if (!hadControllerAtStartup) return; // first-ever install
+                reloadScheduled = true;
+                performUpdateReload();
+            });
+
+            reg.addEventListener('updatefound', () => {
+                const newSW = reg.installing;
+                if (!newSW) return;
+                newSW.addEventListener('statechange', () => {
+                    if (newSW.state !== 'installed') return;
+                    // Only meaningful if there's an old SW already controlling us;
+                    // otherwise this is the very first install.
+                    if (!navigator.serviceWorker.controller) return;
+                    if (!navigator.onLine) return;
+                    newSW.postMessage({ type: 'SKIP_WAITING' });
+                });
+            });
+
+            const checkForUpdate = () => {
+                if (!navigator.onLine) return;                 // offline → leave cache alone
+                if (reg.waiting) {                             // already downloaded, just activate
+                    reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+                    return;
+                }
+                reg.update().catch(() => { /* transient error — try again later */ });
+            };
+
+            checkForUpdate();                                  // on load
+            setInterval(checkForUpdate, 60 * 60 * 1000);       // hourly while open
+            window.addEventListener('online', checkForUpdate);
+            window.addEventListener('focus', () => {
+                if (navigator.onLine) checkForUpdate();
+            });
+        }
+
+        // ---------- Initialize ----------
+        initCounts();
+        loadPrefs();
+
+        // Restore state that was preserved across an auto-update reload.
+        const pendingUpdateState = loadUpdateSnapshot();
+        const restoredFromUpdate = restoreAppState(pendingUpdateState);
+
+        applyLayoutMode(true);   // apply view mode before first render
+        renderDiffGrid();
+        applyTheme(currentTheme);
+        updateAll();
+        restoreSounds();
+
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            if (chart) { chart.destroy(); chart = null; }
+            updateHistogram();
+        }));
+
+        ['hgb', 'mcv', 'wbc', 'plt'].forEach(id => {
+            document.getElementById(id).addEventListener('input', updateOutput);
+        });
+
+        setTimeout(maybeShowOtherHint, 450);
+
+        // If we just auto-updated, let the user know their counts carried over.
+        if (restoredFromUpdate && consumePendingUpdateToast()) {
+            setTimeout(() => showToast('App updated — your counts were preserved'), 700);
+        }
+
+        // ---------- Service worker (offline support + auto-update) ----------
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', setupAutoUpdate);
+        }
+    </script>
+</body>
+
+</html>
