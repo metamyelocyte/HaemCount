@@ -1,53 +1,56 @@
-const CACHE = 'haemcount-v1';
-
-// Only list files that actually exist in your project.
-// If one of these 404s, the whole install can fail with cache.addAll().
-const ASSETS = [
+const VERSION = 'v1.0.1';                    // ← bump on every release
+const CACHE   = 'haemcount-' + VERSION;
+const ASSETS  = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/icons/icon-192.png',
-  '/js/chart.umd.min.js'
+  '/js/chart.umd.min.js',
+  '/icons/icon-192.png'
 ];
 
-self.addEventListener('install', event => {
-  event.waitUntil(
-    caches.open(CACHE).then(cache => {
-      // Cache each asset individually so one missing file does not break install.
-      return Promise.all(
-        ASSETS.map(url =>
-          cache.add(url).catch(err => {
-            console.warn('Could not cache', url, err);
-          })
-        )
-      );
-    }).then(() => self.skipWaiting())
+self.addEventListener('install', (e) => {
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)));
+});
+
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(
+        keys.filter(k => k !== CACHE).map(k => caches.delete(k))
+      ))
+      .then(() => self.clients.claim())
   );
 });
 
-self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(
-        keys.filter(key => key !== CACHE).map(key => caches.delete(key))
-      )
-    ).then(() => self.clients.claim())
-  );
+self.addEventListener('message', (e) => {
+  if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
-self.addEventListener('fetch', event => {
-  if (event.request.method !== 'GET') return;
+self.addEventListener('fetch', (e) => {
+  const req = e.request;
+  if (req.method !== 'GET') return;
 
-  event.respondWith(
-    caches.match(event.request).then(cached => {
-      if (cached) return cached;
+  // App shell / navigations: network-first, so a new deploy is picked up
+  // as soon as the user is online; cached copy is the offline fallback.
+  if (req.mode === 'navigate' || req.destination === 'document') {
+    e.respondWith(
+      fetch(req)
+        .then(res => {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(req, copy));
+          return res;
+        })
+        .catch(() => caches.match(req).then(hit => hit || caches.match('/index.html')))
+    );
+    return;
+  }
 
-      return fetch(event.request).catch(() => {
-        // If a navigation request fails offline, fall back to the cached app shell.
-        if (event.request.mode === 'navigate') {
-          return caches.match('/index.html');
-        }
-      });
-    })
+  // Static assets: cache-first.
+  e.respondWith(
+    caches.match(req).then(hit => hit || fetch(req).then(res => {
+      const copy = res.clone();
+      caches.open(CACHE).then(c => c.put(req, copy));
+      return res;
+    }))
   );
 });
