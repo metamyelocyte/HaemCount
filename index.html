@@ -1999,6 +1999,10 @@ See the LICENSE file for details.
                 <div class="sound-status" id="soundStatus-century">Default beep</div>
             </div>
             <div class="pref-section">
+                <h4>Tips</h4>
+                <button class="secondary" onclick="resetHints()">Show tips again</button>
+            </div>
+            <div class="pref-section">
                 <h4>Layout</h4>
                 <div id="layoutList"></div>
             </div>
@@ -2184,14 +2188,8 @@ See the LICENSE file for details.
         let otherLabelValue = 'other';
 
         // ---------- Layout mode (view) ----------
-        // 'auto'     → mobile if the *device screen* is small, desktop otherwise
-        // 'desktop'  → always desktop layout
-        // 'mobile'   → always mobile layout
         let layoutMode = 'auto';
 
-        // Auto mode is decided by the physical screen, not the browser window,
-        // so resizing a desktop window never flips the layout. The shortest
-        // screen edge is used so a phone stays "mobile" in landscape too.
         const MOBILE_SCREEN_BREAKPOINT = 700;
         let lastAppliedMobile = null;
 
@@ -2299,9 +2297,6 @@ See the LICENSE file for details.
         };
 
         // ---------- Custom confirm dialog ----------
-        // Replaces native confirm()/alert() so it works reliably in every
-        // environment (some browsers suppress native dialogs inside PWAs or
-        // iframes, which silently breaks reset actions).
         let confirmResolve = null;
 
         function showConfirm(message, options) {
@@ -2886,6 +2881,11 @@ See the LICENSE file for details.
             try { localStorage.setItem(HINT_KEY, '1'); } catch (e) { }
         }
 
+        function resetHints() {
+            try { localStorage.removeItem(HINT_KEY); } catch (e) { }
+            showToast('Tips will show again on next launch');
+        }
+
         function maybeShowOtherHint() {
             if (otherHintSeen()) return;
             if (!layoutVisible.diff) return;
@@ -2899,6 +2899,11 @@ See the LICENSE file for details.
 
         function showOtherHint(target) {
             hideOtherHint(false);
+
+            // Mark as seen immediately — the hint is considered "delivered" as
+            // soon as it is shown, so closing the app before dismissal does not
+            // cause it to reappear next launch.
+            markOtherHintSeen();
 
             hintTarget = target;
             target.classList.add('hint-target');
@@ -2959,7 +2964,7 @@ See the LICENSE file for details.
 
             if (hintEl) { hintEl.remove(); hintEl = null; }
 
-            if (remember) markOtherHintSeen();
+            // The hint flag is now set on display, so nothing else to do here.
         }
 
         function onHintOutsideClick(e) {
@@ -2972,9 +2977,6 @@ See the LICENSE file for details.
         }
 
         // ---------- Layout mode (view) ----------
-        // Returns the shortest edge of the physical screen in CSS pixels.
-        // screen.width/height can be undefined on a few odd embedded
-        // browsers, hence the fallbacks.
         function deviceShortestEdge() {
             const s = window.screen || {};
             const w = Number(s.width) || window.innerWidth || 0;
@@ -2996,8 +2998,6 @@ See the LICENSE file for details.
             document.body.classList.toggle('layout-mobile', mobile);
             document.body.classList.toggle('layout-desktop', !mobile);
 
-            // The histogram must be rebuilt after the layout class changes,
-            // because its container dimensions change with the CSS.
             if (chart) {
                 chart.destroy();
                 chart = null;
@@ -3144,15 +3144,6 @@ See the LICENSE file for details.
         }
 
         // ---------- Mobile numpad ----------
-        // The numpad mirrors a physical numeric keypad. Each cell is placed in
-        // the slot that matches its assigned keybind, so the on-screen layout
-        // stays consistent with muscle memory:
-        //
-        //     7 8 9
-        //     4 5 6
-        //     1 2 3
-        //     0 . +
-        //
         const NUMPAD_POSITIONS = ['7', '8', '9', '4', '5', '6', '1', '2', '3', '0', '.', '+'];
 
         function contrastText(hex) {
@@ -3209,14 +3200,12 @@ See the LICENSE file for details.
             const npGrid = document.createElement('div');
             npGrid.className = 'numpad-grid';
 
-            // Reverse map: keyboard key → cell key
             const keyToCell = {};
             Object.keys(keyMap).forEach(k => { keyToCell[k] = keyMap[k]; });
 
             const placedCellKeys = new Set();
             const usedSlots = new Set();
 
-            // 1) Place each cell at its matching numpad slot, if it has one.
             NUMPAD_POSITIONS.forEach(npKey => {
                 const cellKey = keyToCell[npKey];
                 if (!cellKey || placedCellKeys.has(cellKey)) return;
@@ -3227,8 +3216,6 @@ See the LICENSE file for details.
                 usedSlots.add(npKey);
             });
 
-            // 2) Any remaining cells (e.g. custom keybinds outside the numpad
-            //    set) fill the still-empty numpad slots in order.
             const remaining = ALL_CELLS.filter(c => !placedCellKeys.has(c.key));
             NUMPAD_POSITIONS.forEach(npKey => {
                 if (usedSlots.has(npKey) || remaining.length === 0) return;
@@ -3239,7 +3226,6 @@ See the LICENSE file for details.
                 usedSlots.add(npKey);
             });
 
-            // 3) Safety net: with 12 cells and 12 slots this should never run.
             remaining.forEach(cell => {
                 npGrid.appendChild(createNumpadButton(cell, getKeyForCell(cell.key)));
             });
@@ -3249,8 +3235,6 @@ See the LICENSE file for details.
         }
 
         function npPressStart(btn, key) {
-            // Numpad taps are the first gesture on most phones — make sure the
-            // audio hardware is unlocked right here, inside the gesture.
             unlockAudio();
 
             btn.dataset.lp = '0';
@@ -3853,7 +3837,6 @@ See the LICENSE file for details.
             renderDiffGrid();
             updateAll();
 
-            // Confirmatory message after the reset
             await showConfirm(
                 'Keybinds have been reset to their default values.',
                 { title: '✓ Reset Complete', okText: 'OK', hideCancel: true }
@@ -3913,12 +3896,6 @@ See the LICENSE file for details.
         }
 
         // ---------- Auto layout on screen change (only when in Auto mode) ----------
-        // Window resizing deliberately does NOT switch the layout any more.
-        // Only a change in the device's screen metrics (moving the window to a
-        // different monitor, device rotation) is considered. The
-        // lastAppliedMobile cache in applyLayoutMode() makes this a no-op when
-        // nothing actually changed, so there is no flicker or needless chart
-        // rebuild while dragging a window around.
         let resizeTimer = null;
         function scheduleAutoLayoutCheck(delay) {
             if (layoutMode !== 'auto') return;
@@ -3933,8 +3910,10 @@ See the LICENSE file for details.
         // NOT check for or apply updates on its own. Updates only happen when
         // the user clicks "Check for update" in the About dialog.
         //
-        // State preservation across the update reload is still supported via
-        // sessionStorage so that counts / parameters survive the refresh.
+        // There is deliberately no `controllerchange` listener — the browser
+        // may activate a waiting SW between sessions (e.g. after all windows
+        // are closed), and we do not want that to reload the page. The reload
+        // is triggered explicitly by checkForUpdateManually().
         const UPDATE_SNAPSHOT_KEY = 'haemcount.updateSnapshot.v1';
         const UPDATE_TOAST_KEY = 'haemcount.updateToast.v1';
 
@@ -4035,33 +4014,18 @@ See the LICENSE file for details.
 
         // ---------- Service worker (offline support, manual updates only) ----------
         let swRegistration = null;
-        let swReloadScheduled = false;
 
         async function setupServiceWorker() {
             if (!('serviceWorker' in navigator)) return;
-
-            // Only a *replacement* SW should ever trigger a reload. The very
-            // first install must not.
-            const hadControllerAtStartup = !!navigator.serviceWorker.controller;
-
             try {
                 swRegistration = await navigator.serviceWorker.register('/sw.js');
             } catch (err) {
                 console.warn('Service worker registration failed', err);
-                return;
             }
-
-            navigator.serviceWorker.addEventListener('controllerchange', () => {
-                if (swReloadScheduled) return;
-                if (!navigator.serviceWorker.controller) return;
-                if (!hadControllerAtStartup) return;   // first-ever install
-                swReloadScheduled = true;
-                performUpdateReload();
-            });
-
-            // Deliberately NO automatic update checks here.
-            // No reg.update() on load, no interval, no online / focus listeners.
-            // Updates happen only when the user clicks "Check for update".
+            // Deliberately NO controllerchange listener.
+            // The app never reloads itself because of the SW lifecycle. The
+            // only reload path is checkForUpdateManually(), triggered by the
+            // user from the About dialog.
         }
 
         async function checkForUpdateManually() {
@@ -4087,8 +4051,6 @@ See the LICENSE file for details.
                 if (!newSW) {
                     btn.textContent = '↻ Checking…';
 
-                    // Ask the browser to re-fetch the SW script. `updatefound`
-                    // only fires if the script actually changed on the server.
                     newSW = await new Promise(resolve => {
                         let settled = false;
                         const finish = (sw) => {
@@ -4112,16 +4074,16 @@ See the LICENSE file for details.
                     return;
                 }
 
-                // Wait for the new SW to finish installing.
-                if (newSW.state !== 'installed') {
+                // Wait for the new SW to reach "installed" (or already be active).
+                if (newSW.state !== 'installed' && newSW.state !== 'activated') {
                     btn.textContent = '↻ Downloading…';
                     await new Promise(resolve => {
-                        if (newSW.state === 'installed' || newSW.state === 'redundant') {
+                        if (newSW.state === 'installed' || newSW.state === 'activated' || newSW.state === 'redundant') {
                             resolve();
                             return;
                         }
                         const onChange = () => {
-                            if (newSW.state === 'installed' || newSW.state === 'redundant') {
+                            if (newSW.state === 'installed' || newSW.state === 'activated' || newSW.state === 'redundant') {
                                 newSW.removeEventListener('statechange', onChange);
                                 resolve();
                             }
@@ -4138,9 +4100,23 @@ See the LICENSE file for details.
                 }
 
                 btn.textContent = '↻ Updating…';
-                newSW.postMessage({ type: 'SKIP_WAITING' });
-                // controllerchange fires next → performUpdateReload() reloads with
-                // the new version, preserving the user's counts via the snapshot.
+
+                // Ask the new SW to activate, then wait for it (with a timeout),
+                // then reload from here — not from a global controllerchange
+                // listener, which would also fire on ordinary launches.
+                await new Promise(resolve => {
+                    const done = () => {
+                        navigator.serviceWorker.removeEventListener('controllerchange', done);
+                        clearTimeout(timer);
+                        resolve();
+                    };
+                    navigator.serviceWorker.addEventListener('controllerchange', done);
+                    const timer = setTimeout(done, 3000);
+
+                    newSW.postMessage({ type: 'SKIP_WAITING' });
+                });
+
+                performUpdateReload();
             } catch (err) {
                 console.warn('Update check failed', err);
                 btn.disabled = false;
