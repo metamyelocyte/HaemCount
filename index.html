@@ -1056,6 +1056,35 @@ See the LICENSE file for details.
             background: rgba(255, 255, 255, 0.2);
         }
 
+        .about-header .about-update-btn {
+            display: inline-block;
+            margin-left: 8px;
+            padding: 3px 10px;
+            font-family: inherit;
+            font-size: 10px;
+            font-weight: 600;
+            letter-spacing: 0.3px;
+            vertical-align: middle;
+            white-space: nowrap;
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+        }
+
+        .about-header .about-update-btn:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.32);
+            border-color: rgba(255, 255, 255, 0.85);
+            filter: none;
+        }
+
+        .about-header .about-update-btn:disabled {
+            opacity: 0.55;
+            cursor: default;
+        }
+
         .about-header .about-tagline {
             margin: 7px 0 0;
             font-size: 10px;
@@ -1588,6 +1617,14 @@ See the LICENSE file for details.
             font-size: 24px;
         }
 
+        body.layout-mobile .about-header .about-update-btn {
+            display: block;
+            margin: 10px auto 0;
+            width: fit-content;
+            font-size: 12px;
+            padding: 6px 16px;
+        }
+
         body.layout-mobile .about-header .about-tagline {
             font-size: 11.5px;
         }
@@ -1994,6 +2031,8 @@ See the LICENSE file for details.
                 <img class="about-logo" src="/icons/icon-192.png" alt="HaemCount app icon"
                     onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'about-logo about-logo-fallback',textContent:'🩸'}))">
                 <h2>HaemCount</h2><span class="about-version">v1.0</span>
+                <button type="button" class="about-update-btn" id="checkUpdateBtn"
+                    onclick="checkForUpdateManually()">↻ Check for update</button>
                 <p class="about-tagline">A web reimplementation of the HEMCOUNT differential cell counter</p>
             </div>
 
@@ -3889,15 +3928,17 @@ See the LICENSE file for details.
         window.addEventListener('resize', () => scheduleAutoLayoutCheck(150));
         window.addEventListener('orientationchange', () => scheduleAutoLayoutCheck(250));
 
-        // ---------- Auto-update with state preservation ----------
-        // Online  → check for a new service worker; when one is ready, snapshot
-        //           the current counts/params, activate it, reload, then restore.
-        // Offline → do nothing; the cached app shell is served by the SW.
+        // ---------- Update handling (user-initiated only) ----------
+        // The app is designed to be used as an offline desktop app: it should
+        // NOT check for or apply updates on its own. Updates only happen when
+        // the user clicks "Check for update" in the About dialog.
+        //
+        // State preservation across the update reload is still supported via
+        // sessionStorage so that counts / parameters survive the refresh.
         const UPDATE_SNAPSHOT_KEY = 'haemcount.updateSnapshot.v1';
         const UPDATE_TOAST_KEY = 'haemcount.updateToast.v1';
 
         let updateInProgress = false;
-        let updateRetries = 0;
 
         function captureAppState() {
             return {
@@ -3958,7 +3999,7 @@ See the LICENSE file for details.
         }
 
         function setPendingUpdateToast() {
-            try { sessionStorage.setItem(UPDATE_TOAST_KEY, '1'); } catch (e) {}
+            try { sessionStorage.setItem(UPDATE_TOAST_KEY, '1'); } catch (e) { }
         }
 
         function consumePendingUpdateToast() {
@@ -3967,20 +4008,12 @@ See the LICENSE file for details.
                     sessionStorage.removeItem(UPDATE_TOAST_KEY);
                     return true;
                 }
-            } catch (e) {}
+            } catch (e) { }
             return false;
         }
 
         function performUpdateReload() {
             if (updateInProgress) return;
-
-            // Don't yank the page out from under a modal the user is working in.
-            // Retry every 5s, giving up after ~60s.
-            if (document.querySelector('.modal.open') && updateRetries < 12) {
-                updateRetries++;
-                setTimeout(performUpdateReload, 5000);
-                return;
-            }
 
             // Commit any in-progress edit (contenteditable count / Other label)
             // so it gets captured in the snapshot.
@@ -3997,71 +4030,130 @@ See the LICENSE file for details.
             bypassUnloadWarning = true;
 
             showToast(ok ? 'Updating — your data will be preserved…' : 'Updating…');
-
-            // Let the toast paint before we navigate away.
             setTimeout(() => location.reload(), 150);
         }
 
-        async function setupAutoUpdate() {
+        // ---------- Service worker (offline support, manual updates only) ----------
+        let swRegistration = null;
+        let swReloadScheduled = false;
+
+        async function setupServiceWorker() {
             if (!('serviceWorker' in navigator)) return;
 
-            // Whether this page was already controlled by an SW when it loaded.
-            // Only a *replacement* SW should trigger a reload; the very first
-            // install must not.
+            // Only a *replacement* SW should ever trigger a reload. The very
+            // first install must not.
             const hadControllerAtStartup = !!navigator.serviceWorker.controller;
 
-            let reg;
             try {
-                reg = await navigator.serviceWorker.register('/sw.js');
+                swRegistration = await navigator.serviceWorker.register('/sw.js');
             } catch (err) {
                 console.warn('Service worker registration failed', err);
                 return;
             }
 
-            let reloadScheduled = false;
             navigator.serviceWorker.addEventListener('controllerchange', () => {
-                if (reloadScheduled) return;
+                if (swReloadScheduled) return;
                 if (!navigator.serviceWorker.controller) return;
-                if (!hadControllerAtStartup) return; // first-ever install
-                reloadScheduled = true;
+                if (!hadControllerAtStartup) return;   // first-ever install
+                swReloadScheduled = true;
                 performUpdateReload();
             });
 
-            reg.addEventListener('updatefound', () => {
-                const newSW = reg.installing;
-                if (!newSW) return;
-                newSW.addEventListener('statechange', () => {
-                    if (newSW.state !== 'installed') return;
-                    // Only meaningful if there's an old SW already controlling us;
-                    // otherwise this is the very first install.
-                    if (!navigator.serviceWorker.controller) return;
-                    if (!navigator.onLine) return;
-                    newSW.postMessage({ type: 'SKIP_WAITING' });
-                });
-            });
+            // Deliberately NO automatic update checks here.
+            // No reg.update() on load, no interval, no online / focus listeners.
+            // Updates happen only when the user clicks "Check for update".
+        }
 
-            const checkForUpdate = () => {
-                if (!navigator.onLine) return;                 // offline → leave cache alone
-                if (reg.waiting) {                             // already downloaded, just activate
-                    reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+        async function checkForUpdateManually() {
+            const btn = document.getElementById('checkUpdateBtn');
+            if (!btn || btn.disabled) return;
+
+            if (!navigator.onLine) {
+                showToast('You are offline — cannot check for updates');
+                return;
+            }
+            if (!swRegistration) {
+                showToast('Update check unavailable');
+                return;
+            }
+
+            btn.disabled = true;
+            const originalText = btn.textContent;
+
+            try {
+                // If a new SW was already downloaded on a previous check, activate it.
+                let newSW = swRegistration.waiting;
+
+                if (!newSW) {
+                    btn.textContent = '↻ Checking…';
+
+                    // Ask the browser to re-fetch the SW script. `updatefound`
+                    // only fires if the script actually changed on the server.
+                    newSW = await new Promise(resolve => {
+                        let settled = false;
+                        const finish = (sw) => {
+                            if (settled) return;
+                            settled = true;
+                            swRegistration.removeEventListener('updatefound', onFound);
+                            clearTimeout(timer);
+                            resolve(sw);
+                        };
+                        const onFound = () => finish(swRegistration.installing);
+                        swRegistration.addEventListener('updatefound', onFound);
+                        const timer = setTimeout(() => finish(null), 4000);
+                        swRegistration.update().catch(() => finish(null));
+                    });
+                }
+
+                if (!newSW) {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    showToast('You are on the latest version');
                     return;
                 }
-                reg.update().catch(() => { /* transient error — try again later */ });
-            };
 
-            checkForUpdate();                                  // on load
-            setInterval(checkForUpdate, 60 * 60 * 1000);       // hourly while open
-            window.addEventListener('online', checkForUpdate);
-            window.addEventListener('focus', () => {
-                if (navigator.onLine) checkForUpdate();
-            });
+                // Wait for the new SW to finish installing.
+                if (newSW.state !== 'installed') {
+                    btn.textContent = '↻ Downloading…';
+                    await new Promise(resolve => {
+                        if (newSW.state === 'installed' || newSW.state === 'redundant') {
+                            resolve();
+                            return;
+                        }
+                        const onChange = () => {
+                            if (newSW.state === 'installed' || newSW.state === 'redundant') {
+                                newSW.removeEventListener('statechange', onChange);
+                                resolve();
+                            }
+                        };
+                        newSW.addEventListener('statechange', onChange);
+                    });
+                }
+
+                if (newSW.state === 'redundant') {
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                    showToast('Update failed — try again later');
+                    return;
+                }
+
+                btn.textContent = '↻ Updating…';
+                newSW.postMessage({ type: 'SKIP_WAITING' });
+                // controllerchange fires next → performUpdateReload() reloads with
+                // the new version, preserving the user's counts via the snapshot.
+            } catch (err) {
+                console.warn('Update check failed', err);
+                btn.disabled = false;
+                btn.textContent = originalText;
+                showToast('Could not check for updates');
+            }
         }
 
         // ---------- Initialize ----------
         initCounts();
         loadPrefs();
 
-        // Restore state that was preserved across an auto-update reload.
+        // Restore state that was preserved across an update reload.
         const pendingUpdateState = loadUpdateSnapshot();
         const restoredFromUpdate = restoreAppState(pendingUpdateState);
 
@@ -4082,14 +4174,14 @@ See the LICENSE file for details.
 
         setTimeout(maybeShowOtherHint, 450);
 
-        // If we just auto-updated, let the user know their counts carried over.
+        // If we just updated, let the user know their counts carried over.
         if (restoredFromUpdate && consumePendingUpdateToast()) {
             setTimeout(() => showToast('App updated — your counts were preserved'), 700);
         }
 
-        // ---------- Service worker (offline support + auto-update) ----------
+        // ---------- Service worker init ----------
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', setupAutoUpdate);
+            window.addEventListener('load', setupServiceWorker);
         }
     </script>
 </body>
