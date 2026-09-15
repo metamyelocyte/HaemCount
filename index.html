@@ -2482,68 +2482,92 @@ See the LICENSE file for details.
         // ---------- Audio (mobile-friendly) ----------
         let audioUnlocked = false;
         let audioPrimed = false;
+        let silentBufferDone = false;
 
-        // Create the context and, crucially, *resume it from inside a user
-        // gesture*. Mobile browsers (iOS Safari, Android Chrome) keep a new
-        // AudioContext in the "suspended" state until a real gesture resumes
-        // it, which is why the counter used to be silent on phones.
-        function initAudio() {
-            if (!audioCtx) {
-                const AC = window.AudioContext || window.webkitAudioContext;
-                if (!AC) { console.warn('Web Audio not supported'); return null; }
+        function getAudioCtx() {
+            if (audioCtx) return audioCtx;
+            const AC = window.AudioContext || window.webkitAudioContext;
+            if (!AC) { console.warn('Web Audio not supported'); return null; }
+            try { audioCtx = new AC({ latencyHint: 'interactive' }); }
+            catch (e) {
                 try { audioCtx = new AC(); }
-                catch (e) { console.warn('Web Audio not supported', e); return null; }
+                catch (e2) { console.warn('Web Audio not supported', e2); return null; }
             }
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume().catch(() => { });
+            // Re-run the silent-buffer unlock whenever the context actually
+            // reaches 'running'. On iOS the very first unlock attempt often
+            // lands while the context is still suspended; a single one-shot
+            // attempt is not enough, so we keep trying.
+            if (audioCtx.addEventListener) {
+                audioCtx.addEventListener('statechange', () => {
+                    if (audioCtx.state === 'running') primeSilentBuffer();
+                });
             }
-            unlockAudio();
             return audioCtx;
         }
 
-        // iOS additionally refuses to output anything until a buffer has been
-        // played from a gesture. A one-sample silent buffer does the trick.
+        // Must be called synchronously from inside a real user gesture.
         function unlockAudio() {
-            if (audioUnlocked || !audioCtx) return;
+            const ctx = getAudioCtx();
+            if (!ctx) return null;
+
+            if (ctx.state === 'suspended' && typeof ctx.resume === 'function') {
+                const p = ctx.resume();
+                if (p && typeof p.catch === 'function') p.catch(() => { });
+            }
+            primeSilentBuffer();
+            return ctx;
+        }
+
+        // iOS refuses to output anything until a buffer has been played from
+        // a gesture. A one-sample silent buffer does the trick.
+        function primeSilentBuffer() {
+            if (silentBufferDone || !audioCtx) return;
             try {
                 const buf = audioCtx.createBuffer(1, 1, 22050);
                 const src = audioCtx.createBufferSource();
                 src.buffer = buf;
                 src.connect(audioCtx.destination);
-                src.start(0);
+                if (src.start) src.start(0);
+                else if (src.noteOn) src.noteOn(0);
+                silentBufferDone = true;
                 audioUnlocked = true;
-            } catch (e) { /* ignore */ }
+            } catch (e) { /* try again on the next gesture */ }
         }
+
+        // Backwards-compatible alias used throughout the rest of the app.
+        function initAudio() { return unlockAudio(); }
 
         function playBeep(freq, duration, vol) {
             if (vol <= 0) return;
-            const ctx = initAudio();
+            const ctx = getAudioCtx();
             if (!ctx) return;
 
             const fire = () => {
                 try {
+                    const t0 = ctx.currentTime;
                     const osc = ctx.createOscillator();
                     const gain = ctx.createGain();
-                    const t0 = ctx.currentTime;
                     osc.type = 'sine';
                     osc.frequency.setValueAtTime(freq, t0);
-                    gain.gain.setValueAtTime(vol, t0);
-                    gain.gain.setValueAtTime(vol, t0 + duration * 0.6);
-                    gain.gain.exponentialRampToValueAtTime(0.001, t0 + duration);
+                    // Quick fade in/out – avoids clicks and keeps the peak predictable.
+                    gain.gain.setValueAtTime(0.0001, t0);
+                    gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.008);
+                    gain.gain.setValueAtTime(vol, Math.max(t0 + 0.008, t0 + duration * 0.6));
+                    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
                     osc.connect(gain);
                     gain.connect(ctx.destination);
                     osc.start(t0);
-                    osc.stop(t0 + duration);
+                    osc.stop(t0 + duration + 0.03);
                 } catch (e) { console.warn('Audio playback failed', e); }
             };
 
-            // If the context is still suspended (e.g. it was created on a
-            // gesture that the browser did not count), wait for the resume
-            // before scheduling the tone so it is not swallowed.
-            if (ctx.state === 'suspended') {
-                ctx.resume().then(fire).catch(fire);
-            } else {
-                fire();
+            if (ctx.state === 'running') { fire(); return; }
+
+            // Still suspended (common on iOS) – resume, then schedule the tone
+            // once the context is genuinely running.
+            const p = ctx.resume();
+            if (p && typeof p.then === 'function') {
+                p.then(() => { if (ctx.state === 'running') fire(); }).catch(() => { });
             }
         }
 
@@ -2571,33 +2595,23 @@ See the LICENSE file for details.
             fallback();
         }
 
-        // Unlock the audio hardware on the very first interaction, whatever it
-        // is. Capture phase so we run before any other handler.
+        // Unlock the audio hardware on the first interaction, whatever it is.
+        // Capture phase so we run before any other handler. The listeners stay
+        // in place until the context is genuinely running.
         (function primeAudioOnFirstGesture() {
             const events = ['pointerdown', 'touchstart', 'touchend', 'mousedown', 'click', 'keydown'];
             const opts = { capture: true, passive: true };
 
             const prime = () => {
-                if (audioPrimed) return;
-                audioPrimed = true;
+                const ctx = unlockAudio();
 
-                initAudio();
+                if (ctx && ctx.state === 'running' && audioUnlocked) {
+                    audioPrimed = true;
+                }
 
-                // Also prime any custom <audio> element for iOS.
-                SOUND_TYPES.forEach(type => {
-                    const s = customSounds[type];
-                    if (!s || !s.url) return;
-                    try {
-                        const a = new Audio(s.url);
-                        a.volume = 0;
-                        const p = a.play();
-                        if (p && typeof p.then === 'function') {
-                            p.then(() => a.pause()).catch(() => { });
-                        }
-                    } catch (e) { /* ignore */ }
-                });
-
-                events.forEach(evt => document.removeEventListener(evt, prime, opts));
+                if (audioPrimed) {
+                    events.forEach(evt => document.removeEventListener(evt, prime, opts));
+                }
             };
 
             events.forEach(evt => document.addEventListener(evt, prime, opts));
@@ -2606,7 +2620,10 @@ See the LICENSE file for details.
         // Coming back from the background can leave the context suspended.
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) return;
-            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => { });
+            if (audioCtx && audioCtx.state === 'suspended') {
+                const p = audioCtx.resume();
+                if (p && typeof p.catch === 'function') p.catch(() => { });
+            }
         });
 
         // ---------- Custom sound persistence ----------
@@ -3195,7 +3212,7 @@ See the LICENSE file for details.
         function npPressStart(btn, key) {
             // Numpad taps are the first gesture on most phones — make sure the
             // audio hardware is unlocked right here, inside the gesture.
-            initAudio();
+            unlockAudio();
 
             btn.dataset.lp = '0';
             clearTimeout(btn._lpTimer);
@@ -3297,7 +3314,7 @@ See the LICENSE file for details.
             if (delta < 0 && counts[key] <= 0) return;
             counts[key] = (counts[key] || 0) + delta;
             if (delta > 0) {
-                initAudio();
+                unlockAudio();
                 const total = getTotal();
                 if (total > 0 && total % 100 === 0) playSound('century');
                 else playSound('normal');
