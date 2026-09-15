@@ -1,4 +1,4 @@
-const VERSION = 'v1.0.1';                    // ← bump ONLY when you want to release an update
+const VERSION = 'v1.0.2';                    // ← bump ONLY when you want to release an update
 const CACHE   = 'haemcount-' + VERSION;
 const ASSETS  = [
   '/',
