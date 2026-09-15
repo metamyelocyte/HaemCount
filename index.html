@@ -1407,6 +1407,9 @@ See the LICENSE file for details.
             chartType = (prefs.chartType === 'pie') ? 'pie' : 'bar';
             layoutMode = (prefs.layoutMode === 'mobile' || prefs.layoutMode === 'desktop') ? prefs.layoutMode : 'auto';
             mobileEntry = (prefs.mobileEntry === 'list') ? 'list' : 'numpad';
+
+            try { resumeBarDismissed = appStorage.getItem(RESUME_DISMISSED_KEY) === '1'; }
+            catch (e) { resumeBarDismissed = false; }
         }
 
         const SHIFT_MAP = {
@@ -1726,6 +1729,10 @@ See the LICENSE file for details.
         let autoSaveTimer = null;
         let autoSaveSuppressed = false;
 
+        // Remembered dismissal of the "Resume auto-save" bar
+        const RESUME_DISMISSED_KEY = 'haemcount.resumeBarDismissed.v1';
+        let resumeBarDismissed = false;
+
         function sessionPathLabel() {
             const base = dirHandle && dirHandle.name ? dirHandle.name : 'Documents';
             return base + '/' + AUTO_FOLDER_NAME + '/' + AUTO_FILE_NAME;
@@ -1839,6 +1846,7 @@ See the LICENSE file for details.
                         applyFullSession(existing, { silent: true });
                         autoSaveSuppressed = false;
                         autoSaveEnabled = true;
+                        clearResumeBarDismissal();
                         await flushAutoSave();
                         refreshAutoSaveUI();
                         updateStorageDiagnostics();
@@ -1849,6 +1857,7 @@ See the LICENSE file for details.
                 }
 
                 autoSaveEnabled = true;
+                clearResumeBarDismissal();
                 await flushAutoSave();
                 refreshAutoSaveUI();
                 updateStorageDiagnostics();
@@ -1932,6 +1941,7 @@ See the LICENSE file for details.
                     return;
                 }
                 autoSaveEnabled = true;
+                clearResumeBarDismissal();
                 const data = await readExistingSessionFile();
                 if (data) {
                     autoSaveSuppressed = true;
@@ -1966,9 +1976,19 @@ See the LICENSE file for details.
             showToast('Auto-save disconnected');
         }
 
-        function dismissResumeBar() { hideResumeBar(); }
+        function dismissResumeBar() {
+            hideResumeBar();
+            resumeBarDismissed = true;
+            try { appStorage.setItem(RESUME_DISMISSED_KEY, '1'); } catch (e) {}
+        }
+
+        function clearResumeBarDismissal() {
+            resumeBarDismissed = false;
+            try { appStorage.removeItem(RESUME_DISMISSED_KEY); } catch (e) {}
+        }
 
         function showResumeBar(noHandle) {
+            if (resumeBarDismissed) return;          // user pressed "Not now"
             const bar = document.getElementById('resumeBar');
             const textEl = document.getElementById('resumeBarText');
             const btn = document.getElementById('resumeBarBtn');
@@ -3092,10 +3112,24 @@ See the LICENSE file for details.
         document.querySelectorAll('.modal').forEach(m => {
             m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
         });
+
         document.addEventListener('keydown', (e) => {
+            const cm = document.getElementById('confirmModal');
+            if (cm && cm.classList.contains('open')) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    closeConfirmModal(true);
+                    return;
+                }
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopImmediatePropagation();
+                    closeConfirmModal(false);
+                    return;
+                }
+            }
             if (e.key === 'Escape') {
-                const cm = document.getElementById('confirmModal');
-                if (cm.classList.contains('open')) { closeConfirmModal(false); return; }
                 document.querySelectorAll('.modal.open').forEach(m => m.classList.remove('open'));
             }
         });
@@ -3534,7 +3568,8 @@ See the LICENSE file for details.
                 'haemcount.prefs.v1',
                 'haemcount.backlog.v1',
                 'haemcount.sound.normal',
-                'haemcount.sound.century'
+                'haemcount.sound.century',
+                'haemcount.resumeBarDismissed.v1'
             ]);
             console.info('HaemCount storage backend:', appStorage.mode,
                 '| probe:', appStorage.probe,
