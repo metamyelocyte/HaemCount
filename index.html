@@ -13,6 +13,8 @@ Copyright (C) 2026  Tiffany Lau
 Licensed under the GNU General Public License v3.0 (GPLv3).
 See the LICENSE file for details.
 -->
+    <!-- Chart.js is self-hosted so the app no longer depends on a third-party CDN.
+         This is required for reliable offline use (see /sw.js). -->
     <script src="/js/chart.umd.min.js"></script>
     <style>
         :root {
@@ -742,8 +744,7 @@ See the LICENSE file for details.
         </div>
 
         <div class="main" id="mainArea">
-            <!-- One-click resume bar: shown only when we have a saved file handle
-                 but the browser needs a user gesture to re-grant permission. -->
+            <!-- One-click resume bar -->
             <div class="resume-bar" id="resumeBar">
                 <span>↺</span>
                 <span class="grow">
@@ -754,16 +755,16 @@ See the LICENSE file for details.
                 <button type="button" class="secondary" onclick="dismissResumeBar()">Not now</button>
             </div>
 
-            <!-- Storage warning: shown when no persistent storage is available. -->
+            <!-- Storage warning -->
             <div class="storage-warning" id="storageWarning">
                 <span>⚠</span>
                 <span class="grow" id="storageWarningText">
                     This browser blocks persistent storage, so your counts will be lost when you close it.
                 </span>
-                <button type="button" class="primary" id="enableAutoSaveBtn" onclick="chooseSessionFile()">
-                    Enable auto-save to file
+                <button type="button" class="primary" id="enableAutoSaveBtn" onclick="reconnectSessionFile()">
+                    Set up auto-save to file
                 </button>
-                <button type="button" onclick="openSession()">Session…</button>
+                <button type="button" onclick="openSession()">Save/Load…</button>
             </div>
 
             <div class="top-section" data-section="params">
@@ -846,7 +847,7 @@ See the LICENSE file for details.
                     <span class="filename" id="autoSaveFileName">Auto-save is off</span>
                 </div>
                 <div class="session-actions" style="margin-top: 8px;">
-                    <button type="button" id="autoSaveChooseBtn" onclick="chooseSessionFile()">
+                    <button type="button" id="autoSaveChooseBtn" onclick="reconnectSessionFile()">
                         📎 Choose session file…
                     </button>
                     <button type="button" class="secondary" id="autoSaveForgetBtn"
@@ -1128,18 +1129,29 @@ See the LICENSE file for details.
         const STORAGE_STORE = 'kv';
         const FILE_HANDLE_KEY = 'sessionFileHandle';
 
+        let persistenceProbe = null;
+        let lastKnownFileName = '';
+
         const appStorage = (function () {
             let mode = 'memory';
             const cache = Object.create(null);
             let dbPromise = null;
+            let idbWorksFlag = false;
+
+            const BOOT_ID_KEY = 'haemcount.bootId';
+            const SESSION_MARK = 'haemcount.sessionMark';
+            const LS_VERDICT = 'haemcount.lsVerdict';
+            const IDB_VERDICT = 'haemcount.idbVerdict';
+            const CACHE_VERDICT = 'haemcount.cacheVerdict';
+            const CACHE_NAME = 'haemcount-kv';
 
             function testLocalStorage() {
                 try {
                     const k = '__haemcount_probe__';
                     localStorage.setItem(k, '1');
-                    if (localStorage.getItem(k) !== '1') return false;
+                    const v = localStorage.getItem(k);
                     localStorage.removeItem(k);
-                    return true;
+                    return v === '1';
                 } catch (e) { return false; }
             }
 
@@ -1158,11 +1170,36 @@ See the LICENSE file for details.
                 return dbPromise;
             }
 
+            function idbGet(key) {
+                return openDB().then(db => new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORAGE_STORE, 'readonly');
+                    const req = tx.objectStore(STORAGE_STORE).get(key);
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => reject(req.error);
+                }));
+            }
+            function idbWrite(key, value) {
+                return openDB().then(db => new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORAGE_STORE, 'readwrite');
+                    tx.objectStore(STORAGE_STORE).put(value, key);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                    tx.onabort = () => reject(tx.error);
+                }));
+            }
+            function idbDelete(key) {
+                return openDB().then(db => new Promise((resolve, reject) => {
+                    const tx = db.transaction(STORAGE_STORE, 'readwrite');
+                    tx.objectStore(STORAGE_STORE).delete(key);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                    tx.onabort = () => reject(tx.error);
+                }));
+            }
             function idbReadAll() {
                 return openDB().then(db => new Promise((resolve, reject) => {
                     const tx = db.transaction(STORAGE_STORE, 'readonly');
-                    const store = tx.objectStore(STORAGE_STORE);
-                    const req = store.openCursor();
+                    const req = tx.objectStore(STORAGE_STORE).openCursor();
                     const out = Object.create(null);
                     req.onsuccess = () => {
                         const cur = req.result;
@@ -1173,108 +1210,183 @@ See the LICENSE file for details.
                 }));
             }
 
-            function idbGet(key) {
-                return openDB().then(db => new Promise((resolve, reject) => {
-                    const tx = db.transaction(STORAGE_STORE, 'readonly');
-                    const req = tx.objectStore(STORAGE_STORE).get(key);
-                    req.onsuccess = () => resolve(req.result);
-                    req.onerror = () => reject(req.error);
-                }));
-            }
-
-            function idbWrite(key, value) {
-                return openDB().then(db => new Promise((resolve, reject) => {
-                    const tx = db.transaction(STORAGE_STORE, 'readwrite');
-                    tx.objectStore(STORAGE_STORE).put(value, key);
-                    tx.oncomplete = () => resolve();
-                    tx.onerror = () => reject(tx.error);
-                    tx.onabort = () => reject(tx.error);
-                }));
-            }
-
-            function idbDelete(key) {
-                return openDB().then(db => new Promise((resolve, reject) => {
-                    const tx = db.transaction(STORAGE_STORE, 'readwrite');
-                    tx.objectStore(STORAGE_STORE).delete(key);
-                    tx.oncomplete = () => resolve();
-                    tx.onerror = () => reject(tx.error);
-                    tx.onabort = () => reject(tx.error);
-                }));
-            }
-
             async function testIDB() {
-                const probeKey = '__haemcount_idb_probe__';
-                await idbWrite(probeKey, 'ok');
-                const check = await idbGet(probeKey);
-                await idbDelete(probeKey);
-                return check === 'ok';
+                try {
+                    const pk = '__haemcount_idb_probe__';
+                    await idbWrite(pk, 'ok');
+                    const v = await idbGet(pk);
+                    await idbDelete(pk);
+                    return v === 'ok';
+                } catch (e) { return false; }
             }
 
-            async function init() {
-                if (testLocalStorage()) { mode = 'local'; return mode; }
+            // Cache API fallback
+            async function cacheGet(key) {
+                if (!('caches' in window)) return null;
                 try {
-                    const ok = await testIDB();
-                    if (!ok) throw new Error('IndexedDB write test failed');
-                    const all = await idbReadAll();
-                    Object.keys(all).forEach(k => {
-                        if (k !== FILE_HANDLE_KEY) cache[k] = all[k];
-                    });
-                    mode = 'idb';
-                    return mode;
-                } catch (e) {
-                    console.warn('Persistent storage unavailable; using in-memory fallback', e);
-                    mode = 'memory';
-                    return mode;
+                    const c = await caches.open(CACHE_NAME);
+                    const resp = await c.match(key);
+                    if (!resp) return null;
+                    return await resp.text();
+                } catch (e) { return null; }
+            }
+            async function cachePut(key, value) {
+                if (!('caches' in window)) return false;
+                try {
+                    const c = await caches.open(CACHE_NAME);
+                    await c.put(key, new Response(String(value), {
+                        headers: { 'Content-Type': 'text/plain' }
+                    }));
+                    return true;
+                } catch (e) { return false; }
+            }
+            async function cacheDelete(key) {
+                if (!('caches' in window)) return;
+                try {
+                    const c = await caches.open(CACHE_NAME);
+                    await c.delete(key);
+                } catch (e) {}
+            }
+            async function testCache() {
+                try {
+                    const pk = '__haemcount_cache_probe__';
+                    const ok = await cachePut(pk, 'ok');
+                    if (!ok) return false;
+                    const v = await cacheGet(pk);
+                    await cacheDelete(pk);
+                    return v === 'ok';
+                } catch (e) { return false; }
+            }
+
+            function hasInMem(key) {
+                return Object.prototype.hasOwnProperty.call(cache, key);
+            }
+
+            async function init(keysToPreload) {
+                idbWorksFlag = await testIDB();
+                const cacheWorks = await testCache();
+                const lsWorks = testLocalStorage();
+
+                // Persistence probe
+                let sameSession = false;
+                try { sameSession = sessionStorage.getItem(SESSION_MARK) === '1'; } catch (e) {}
+
+                let lsPersistent = null;
+                let idbPersistent = null;
+                let cachePersistent = null;
+
+                if (sameSession) {
+                    try {
+                        const lv = sessionStorage.getItem(LS_VERDICT);
+                        const iv = sessionStorage.getItem(IDB_VERDICT);
+                        const cv = sessionStorage.getItem(CACHE_VERDICT);
+                        lsPersistent = lv === 'yes' ? true : lv === 'no' ? false : null;
+                        idbPersistent = iv === 'yes' ? true : iv === 'no' ? false : null;
+                        cachePersistent = cv === 'yes' ? true : cv === 'no' ? false : null;
+                    } catch (e) {}
+                } else {
+                    let lsBoot = null, idbBoot = null, cacheBoot = null;
+                    if (lsWorks) { try { lsBoot = localStorage.getItem(BOOT_ID_KEY); } catch (e) {} }
+                    if (idbWorksFlag) { try { idbBoot = await idbGet(BOOT_ID_KEY); } catch (e) {} }
+                    if (cacheWorks) { cacheBoot = await cacheGet(BOOT_ID_KEY); }
+
+                    const allEmpty = (lsBoot == null) && (idbBoot == null) && (cacheBoot == null);
+
+                    lsPersistent    = lsWorks        ? (allEmpty ? null : lsBoot    != null) : false;
+                    idbPersistent   = idbWorksFlag   ? (allEmpty ? null : idbBoot   != null) : false;
+                    cachePersistent = cacheWorks     ? (allEmpty ? null : cacheBoot != null) : false;
                 }
+
+                // Write fresh boot ids
+                const freshId = 'b' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+                try { localStorage.setItem(BOOT_ID_KEY, freshId); } catch (e) {}
+                if (idbWorksFlag) { try { await idbWrite(BOOT_ID_KEY, freshId); } catch (e) {} }
+                if (cacheWorks) { await cachePut(BOOT_ID_KEY, freshId); }
+
+                try { sessionStorage.setItem(SESSION_MARK, '1'); } catch (e) {}
+                try {
+                    sessionStorage.setItem(LS_VERDICT,    lsPersistent    === true ? 'yes' : lsPersistent    === false ? 'no' : '');
+                    sessionStorage.setItem(IDB_VERDICT,   idbPersistent   === true ? 'yes' : idbPersistent   === false ? 'no' : '');
+                    sessionStorage.setItem(CACHE_VERDICT, cachePersistent === true ? 'yes' : cachePersistent === false ? 'no' : '');
+                } catch (e) {}
+
+                persistenceProbe = {
+                    lsPersistent, idbPersistent, cachePersistent,
+                    lsWorks, idbWorks: idbWorksFlag, cacheWorks
+                };
+
+                // Choose storage mode
+                if (lsPersistent === true) {
+                    mode = 'local';
+                } else if (idbPersistent === true) {
+                    mode = 'idb';
+                    try {
+                        const all = await idbReadAll();
+                        Object.keys(all).forEach(k => {
+                            if (k !== FILE_HANDLE_KEY && k !== BOOT_ID_KEY) cache[k] = all[k];
+                        });
+                    } catch (e) {}
+                } else if (cachePersistent === true) {
+                    mode = 'cache';
+                    for (const k of (keysToPreload || [])) {
+                        const v = await cacheGet(k);
+                        if (v !== null) cache[k] = v;
+                    }
+                } else if (lsPersistent === null || idbPersistent === null || cachePersistent === null) {
+                    mode = 'local';
+                } else {
+                    mode = 'memory';
+                }
+
+                return mode;
             }
 
             function getItem(key) {
-                if (mode === 'local') { try { return localStorage.getItem(key); } catch (e) { return null; } }
-                return Object.prototype.hasOwnProperty.call(cache, key) ? cache[key] : null;
+                if (mode === 'local') {
+                    try { return localStorage.getItem(key); } catch (e) { return null; }
+                }
+                return hasInMem(key) ? cache[key] : null;
             }
 
             function setItem(key, value) {
                 value = String(value);
                 if (mode === 'local') {
-                    try { localStorage.setItem(key, value); } catch (e) { }
+                    try { localStorage.setItem(key, value); } catch (e) {}
                     return;
                 }
                 cache[key] = value;
-                if (mode === 'idb') idbWrite(key, value).catch(() => { });
+                if (mode === 'idb')   idbWrite(key, value).catch(() => {});
+                if (mode === 'cache') cachePut(key, value).catch(() => {});
             }
 
             function removeItem(key) {
-                if (mode === 'local') { try { localStorage.removeItem(key); } catch (e) { } return; }
+                if (mode === 'local') { try { localStorage.removeItem(key); } catch (e) {} return; }
                 delete cache[key];
-                if (mode === 'idb') idbDelete(key).catch(() => { });
+                if (mode === 'idb')   idbDelete(key).catch(() => {});
+                if (mode === 'cache') cacheDelete(key).catch(() => {});
             }
 
-            // File-handle helpers use raw IndexedDB because handles cannot be
-            // stored in localStorage (they are not serialisable) and they
-            // require the structured-clone algorithm that IDB uses.
             async function putHandle(key, handle) {
                 try { await idbWrite(key, handle); return true; }
                 catch (e) { console.warn('Could not persist file handle', e); return false; }
             }
-
             async function getHandle(key) {
                 try { return await idbGet(key); }
                 catch (e) { return null; }
             }
-
             async function removeHandle(key) {
-                try { await idbDelete(key); } catch (e) { }
+                try { await idbDelete(key); } catch (e) {}
             }
-
-            // Feature detection: File System Access API present?
-            const hasFileSystemAccess = typeof window !== 'undefined'
-                && typeof window.showSaveFilePicker === 'function';
 
             return {
                 init, getItem, setItem, removeItem,
                 putHandle, getHandle, removeHandle,
-                hasFileSystemAccess,
-                get mode() { return mode; }
+                get idbWorks() { return idbWorksFlag; },
+                get hasFileSystemAccess() {
+                    return typeof window !== 'undefined' && typeof window.showSaveFilePicker === 'function';
+                },
+                get mode() { return mode; },
+                get probe() { return persistenceProbe; }
             };
         })();
 
@@ -1615,9 +1727,7 @@ See the LICENSE file for details.
                 });
             }
 
-            // Write preferences back to local storage, then re-render.
-            // We deliberately bypass savePrefs() so we don't schedule a
-            // redundant auto-save while applying an incoming file.
+            // Write preferences back without re-scheduling auto-save.
             try {
                 appStorage.setItem(PREFS_KEY, JSON.stringify({
                     volume: globalVolume, theme: currentTheme, keybinds: keyMap,
@@ -1636,10 +1746,6 @@ See the LICENSE file for details.
         }
 
         // ---------- Auto-save to a chosen file ----------
-        // We keep a FileSystemFileHandle in IndexedDB. If IndexedDB also gets
-        // wiped on your machine, the handle cannot be remembered across
-        // sessions, but the auto-save still works perfectly within a session
-        // (and the file itself lives outside the browser, so it survives).
         let currentFileHandle = null;
         let currentFileName = '';
         let autoSaveTimer = null;
@@ -1677,73 +1783,44 @@ See the LICENSE file for details.
             return JSON.parse(text);
         }
 
-        async function chooseSessionFile() {
-            if (!appStorage.hasFileSystemAccess) {
-                await showConfirm(
-                    'This browser does not support automatic file saving. ' +
-                    'Use "Download session file" and "Load session from file" in the Session menu instead.',
-                    { title: 'Not supported', okText: 'OK', hideCancel: true }
-                );
-                return;
-            }
-            try {
-                const handle = await window.showSaveFilePicker({
-                    suggestedName: 'haemcount-session.json',
-                    types: [{
-                        description: 'HaemCount Session',
-                        accept: { 'application/json': ['.json'] }
-                    }]
-                });
-                currentFileHandle = handle;
-                currentFileName = handle.name || 'session file';
-                await appStorage.putHandle(FILE_HANDLE_KEY, handle);
-
-                // Write current state immediately so the file is not empty.
-                await flushAutoSave();
-
-                refreshAutoSaveUI();
-                hideResumeBar();
-                updateStorageDiagnostics();
-                showToast('Auto-save enabled — file will update automatically');
-            } catch (e) {
-                if (e && e.name === 'AbortError') return; // user cancelled
-                console.warn('Choose session file failed', e);
-                showToast('Could not set up auto-save');
-            }
-        }
-
-        async function forgetSessionFile() {
-            const ok = await showConfirm(
-                'Stop auto-saving to this file?\n\nThe file itself is not deleted — you can still load it manually.',
-                { title: 'Disconnect Session File', okText: 'Disconnect' }
-            );
-            if (!ok) return;
-            currentFileHandle = null;
-            currentFileName = '';
-            await appStorage.removeHandle(FILE_HANDLE_KEY);
-            refreshAutoSaveUI();
-            updateStorageDiagnostics();
-            showToast('Auto-save disconnected');
-        }
-
-        // Restore the persisted handle on startup, and either load silently
-        // (permission still granted) or show the one-click resume bar.
+        // Restore the persisted handle on startup.
         async function tryRestoreSessionFileHandle() {
             if (!appStorage.hasFileSystemAccess) return;
-            let handle;
+
+            let handle = null;
             try { handle = await appStorage.getHandle(FILE_HANDLE_KEY); }
-            catch (e) { return; }
-            if (!handle) return;
+            catch (e) { handle = null; }
+
+            try {
+                const hint = appStorage.getItem('haemcount.lastFileName');
+                if (hint) lastKnownFileName = hint;
+            } catch (e) {}
+
+            if (!handle) {
+                if (lastKnownFileName) {
+                    showResumeBar(
+                        'Your session file (' + lastKnownFileName + ') is ready to be reconnected. ' +
+                        'Click "Reconnect session file" to pick it again — it opens in the same folder.'
+                    );
+                    const btn = document.querySelector('#resumeBar button');
+                    if (btn) {
+                        btn.textContent = 'Reconnect session file';
+                        btn.onclick = () => reconnectSessionFile();
+                    }
+                }
+                refreshAutoSaveUI();
+                return;
+            }
 
             currentFileHandle = handle;
             currentFileName = handle.name || 'session file';
+            try { lastKnownFileName = currentFileName; } catch (e) {}
 
             let perm = 'prompt';
             try { perm = await handle.queryPermission({ mode: 'readwrite' }); }
             catch (e) { perm = 'prompt'; }
 
             if (perm === 'granted') {
-                // Silent auto-load — we were granted access last time.
                 try {
                     const data = await readSessionFromHandle(handle);
                     if (data) {
@@ -1758,16 +1835,102 @@ See the LICENSE file for details.
                 }
                 refreshAutoSaveUI();
             } else if (perm === 'prompt') {
-                // Needs one click to re-grant permission.
                 showResumeBar();
                 refreshAutoSaveUI();
             } else {
-                // Denied — drop the handle.
                 await appStorage.removeHandle(FILE_HANDLE_KEY);
                 currentFileHandle = null;
                 currentFileName = '';
                 refreshAutoSaveUI();
             }
+        }
+
+        // One-click reconnect — reopens the picker at the same folder/filename.
+        async function reconnectSessionFile() {
+            if (!appStorage.hasFileSystemAccess) {
+                await showConfirm(
+                    'This browser does not support automatic file saving. ' +
+                    'Use "Download session file" and "Load session from file" in the Save/Load menu instead.',
+                    { title: 'Not supported', okText: 'OK', hideCancel: true }
+                );
+                return;
+            }
+            try {
+                const suggested = lastKnownFileName || 'haemcount-session.json';
+                const handle = await window.showSaveFilePicker({
+                    id: 'haemcount-session',
+                    startIn: 'documents',
+                    suggestedName: suggested,
+                    types: [{
+                        description: 'HaemCount Session',
+                        accept: { 'application/json': ['.json'] }
+                    }]
+                });
+                currentFileHandle = handle;
+                currentFileName = handle.name || 'session file';
+                lastKnownFileName = currentFileName;
+                try { appStorage.setItem('haemcount.lastFileName', currentFileName); } catch (e) {}
+
+                // If the file already contains a session, offer to load it.
+                let existingData = null;
+                try {
+                    const file = await handle.getFile();
+                    if (file.size > 0) {
+                        const text = await file.text();
+                        const parsed = JSON.parse(text);
+                        if (parsed && parsed.app === 'HaemCount') existingData = parsed;
+                    }
+                } catch (e) { /* ignore */ }
+
+                if (existingData) {
+                    const saved = existingData.savedAt
+                        ? new Date(existingData.savedAt).toLocaleString()
+                        : 'an earlier time';
+                    const ok = await showConfirm(
+                        'This file already contains a HaemCount session from ' + saved + '.\n\n' +
+                        'Load it now? (Cancel overwrites it with the current counts instead.)',
+                        { title: 'Session File Found', okText: 'Load Session', cancelText: 'Overwrite' }
+                    );
+                    if (ok) {
+                        autoSaveSuppressed = true;
+                        applyFullSession(existingData, { silent: true });
+                        autoSaveSuppressed = false;
+                        showToast('Session loaded from file');
+                    } else {
+                        await flushAutoSave();
+                        showToast('Auto-save enabled — file will update automatically');
+                    }
+                } else {
+                    await flushAutoSave();
+                    showToast('Auto-save enabled — file will update automatically');
+                }
+
+                await appStorage.putHandle(FILE_HANDLE_KEY, handle);
+                refreshAutoSaveUI();
+                hideResumeBar();
+                updateStorageDiagnostics();
+            } catch (e) {
+                if (e && e.name === 'AbortError') return;
+                console.warn('Reconnect session file failed', e);
+                showToast('Could not set up auto-save');
+            }
+        }
+
+        // Alias for callers using the old name.
+        const chooseSessionFile = reconnectSessionFile;
+
+        async function forgetSessionFile() {
+            const ok = await showConfirm(
+                'Stop auto-saving to this file?\n\nThe file itself is not deleted — you can still load it manually.',
+                { title: 'Disconnect Session File', okText: 'Disconnect' }
+            );
+            if (!ok) return;
+            currentFileHandle = null;
+            currentFileName = '';
+            await appStorage.removeHandle(FILE_HANDLE_KEY);
+            refreshAutoSaveUI();
+            updateStorageDiagnostics();
+            showToast('Auto-save disconnected');
         }
 
         async function resumeSessionFromHandle() {
@@ -1802,15 +1965,13 @@ See the LICENSE file for details.
             }
         }
 
-        function dismissResumeBar() {
-            hideResumeBar();
-        }
+        function dismissResumeBar() { hideResumeBar(); }
 
         function showResumeBar(customMessage) {
             const bar = document.getElementById('resumeBar');
             const nameEl = document.getElementById('resumeFileName');
             if (!bar) return;
-            if (nameEl) nameEl.textContent = currentFileName || 'the session file';
+            if (nameEl) nameEl.textContent = currentFileName || lastKnownFileName || 'the session file';
             if (customMessage) {
                 const grow = bar.querySelector('.grow');
                 if (grow) grow.textContent = customMessage;
@@ -1842,12 +2003,13 @@ See the LICENSE file for details.
 
             if (!currentFileHandle) {
                 stateEl.className = 'auto-save-state off';
-                if (nameEl) nameEl.textContent = 'Auto-save is off';
+                if (nameEl) nameEl.textContent = lastKnownFileName
+                    ? (lastKnownFileName + ' — reconnect to resume')
+                    : 'Auto-save is off';
                 if (forgetBtn) forgetBtn.style.display = 'none';
                 return;
             }
 
-            // Handle exists — check permission without prompting.
             currentFileHandle.queryPermission({ mode: 'readwrite' }).then(perm => {
                 if (perm === 'granted') {
                     stateEl.className = 'auto-save-state';
@@ -1940,22 +2102,47 @@ See the LICENSE file for details.
             if (!modeEl || !box) return;
 
             const m = appStorage.mode;
+            const probe = appStorage.probe || {};
             const fileAuto = !!currentFileHandle;
+
+            const confirmedNonPersistent =
+                (probe.lsPersistent === false) &&
+                (probe.idbPersistent === false) &&
+                (probe.cachePersistent === false);
+
+            const unverified =
+                (probe.lsPersistent === null) ||
+                (probe.idbPersistent === null) ||
+                (probe.cachePersistent === null);
+
             let label, detail, cls;
-            if (m === 'local' || m === 'idb') {
-                label = 'Automatic storage: ' + (m === 'local' ? 'LocalStorage' : 'IndexedDB') + ' ✓';
+            if (m === 'local') {
+                label = 'Automatic storage: LocalStorage ✓';
                 detail = 'Your data is saved automatically and will still be here when you reopen this app.';
+                cls = 'ok';
+            } else if (m === 'idb') {
+                label = 'Automatic storage: IndexedDB ✓';
+                detail = 'Your data is saved automatically and will still be here when you reopen this app.';
+                cls = 'ok';
+            } else if (m === 'cache') {
+                label = 'Automatic storage: Cache storage ✓';
+                detail = 'The browser blocks LocalStorage and IndexedDB, but the Cache API is available. '
+                    + 'Your data will be preserved across restarts.';
                 cls = 'ok';
             } else if (fileAuto) {
                 label = 'Auto-save to file ✓';
                 detail = 'The browser blocks its own storage, but your session is saved to the file you picked '
                     + 'and will be loaded automatically next time (one click may be needed to re-grant access).';
                 cls = 'ok';
+            } else if (unverified) {
+                label = 'Storage status: verifying…';
+                detail = 'This is the first launch on this browser. Persistence will be confirmed next time you open it.';
+                cls = '';
             } else {
                 label = 'Session-only storage ⚠ (does NOT persist)';
-                detail = 'This browser is blocking all persistent storage. Your counts would be lost when you close '
-                    + 'the window. Click "Enable auto-save to file" above to save your work to a file you can reload '
-                    + 'next time.';
+                detail = 'This browser is blocking all persistent storage (LocalStorage, IndexedDB and Cache). '
+                    + 'Your counts would be lost when you close the window. Click "Set up auto-save to file" '
+                    + 'above to save your work to a file you can reload next time.';
                 cls = 'warn';
             }
             modeEl.textContent = label;
@@ -1965,27 +2152,31 @@ See the LICENSE file for details.
             let short;
             if (m === 'local') short = 'Local';
             else if (m === 'idb') short = 'IndexedDB';
+            else if (m === 'cache') short = 'Cache';
             else if (fileAuto) short = 'File';
+            else if (unverified) short = 'Verifying…';
             else short = 'Session only ⚠';
             if (statusEl) {
                 statusEl.textContent = short;
-                statusEl.className = (m === 'memory' && !fileAuto) ? 'warn' : 'ok';
+                statusEl.className = (m === 'memory' && !fileAuto && !unverified) ? 'warn' : 'ok';
             }
-           if (menuBtn) {
-    const urgent = (m === 'memory' && !fileAuto);
-    menuBtn.classList.toggle('session-highlight', urgent);
-    menuBtn.textContent = urgent ? 'Save/Load ⚠' : 'Save/Load';
-}
+
+            if (menuBtn) {
+                const urgent = (m === 'memory' && !fileAuto && !unverified);
+                menuBtn.classList.toggle('session-highlight', urgent);
+                menuBtn.textContent = urgent ? 'Save/Load ⚠' : 'Save/Load';
+            }
+
             if (warning) {
-                const showWarning = (m === 'memory' && !fileAuto);
+                const showWarning = (m === 'memory' && !fileAuto && !unverified);
                 warning.classList.toggle('show', showWarning);
                 if (warningText && showWarning) {
                     if (appStorage.hasFileSystemAccess) {
-                        warningText.textContent = 'This browser is blocking persistent storage. Click "Enable auto-save to file" '
+                        warningText.textContent = 'This browser is blocking persistent storage. Click "Set up auto-save to file" '
                             + 'to keep your counts across restarts.';
                     } else {
                         warningText.textContent = 'This browser is blocking persistent storage and does not support automatic file saving. '
-                            + 'Use Session… to download / load a file manually.';
+                            + 'Use Save/Load… to download / load a file manually.';
                     }
                 }
             }
@@ -2281,21 +2472,18 @@ See the LICENSE file for details.
             return ALL_CELLS.some(c => (counts[c.key] || 0) > 0);
         }
         window.addEventListener('beforeunload', (e) => {
-            // Best-effort flush of the session file before leaving.
             if (currentFileHandle) {
                 try { flushAutoSave(); } catch (err) { }
             }
             if (bypassUnloadWarning) return;
             if (!warnBeforeReset) return;
             if (!hasCountedCells()) return;
-            // If auto-save is active, the data is already on disk — no need to nag.
             if (currentFileHandle) return;
             e.preventDefault();
             e.returnValue = '';
             return '';
         });
 
-        // Also flush when the tab is being hidden (mobile/desktop).
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'hidden' && currentFileHandle) {
                 try { flushAutoSave(); } catch (e) { }
@@ -3413,8 +3601,15 @@ See the LICENSE file for details.
 
         // ---------- Initialize ----------
         (async function bootstrap() {
-            await appStorage.init();
+            await appStorage.init([
+                'haemcount.prefs.v1',
+                'haemcount.backlog.v1',
+                'haemcount.otherHintSeen.v1',
+                'haemcount.sound.normal',
+                'haemcount.sound.century'
+            ]);
             console.info('HaemCount storage backend:', appStorage.mode,
+                '| probe:', appStorage.probe,
                 '| File System Access API:', appStorage.hasFileSystemAccess);
 
             initCounts();
@@ -3443,10 +3638,6 @@ See the LICENSE file for details.
 
             updateStorageDiagnostics();
 
-            // Try to restore a previously chosen session file, and if the
-            // browser remembers permission, auto-load silently. Otherwise a
-            // one-click Resume bar is shown. If neither storage nor file
-            // auto-save can work, the warning banner explains what to do.
             try {
                 await tryRestoreSessionFileHandle();
             } catch (e) {
