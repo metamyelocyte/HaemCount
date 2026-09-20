@@ -14,7 +14,7 @@
 
 ---
 
-HaemCount is a lightweight, browser-based tool for manual differential leukocyte counting. It supports both peripheral blood and bone marrow specimens, tracks cell populations in real time, and produces a formatted report ready to paste into a clinical note or laboratory record.
+HaemCount is a lightweight, browser-based tool for manual differential counting. It supports both peripheral blood and bone marrow specimens, tracks cell populations in real time, and produces a formatted report ready to paste into a clinical note or laboratory record.
 
 Built as a single-page application with no build step and no backend, it runs entirely on the client and can be installed as a progressive web app for offline use.
 
