@@ -1,7 +1,7 @@
 <div align="center">
   <img src="icons/icon-192.png" alt="HaemCount icon" width="96">
   <h1>HaemCount</h1>
-  <p><em>A web reimplementation of the HEMCOUNT differential cell counter</em></p>
+  <p><em>A lightweight, browser-based tool for manual differential cell counting.</em></p>
 
   <p>
     <img alt="License: GPLv3" src="https://img.shields.io/badge/License-GPLv3-blue.svg">
