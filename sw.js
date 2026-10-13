@@ -1,6 +1,6 @@
-const VERSION = 'v1.0';                    // ← bump ONLY when you want to release an update
-const CACHE   = 'haemcount-' + VERSION;
-const ASSETS  = [
+const VERSION = 'v1.1';
+const CACHE = 'haemcount-' + VERSION;
+const ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
@@ -22,7 +22,7 @@ self.addEventListener('activate', (e) => {
   );
 });
 
-// Only ever called when the user clicks "Check for update" in the About dialog.
+// Apply updates when requested by the About dialog.
 self.addEventListener('message', (e) => {
   if (e.data && e.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
@@ -31,14 +31,39 @@ self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
 
-  // Navigations / documents: cache-first. This is an offline desktop app —
-  // the cached app shell is the source of truth. A new version only reaches
-  // the user when the SW file itself changes (i.e. VERSION is bumped) AND
-  // the user explicitly clicks "Check for update".
+  // Preserve offline-first navigation, but recover if cached HTML is missing.
   if (req.mode === 'navigate' || req.destination === 'document') {
-    e.respondWith(
-      caches.match(req).then(hit => hit || caches.match('/index.html'))
-    );
+    e.respondWith((async () => {
+      try {
+        const cache = await caches.open(CACHE);
+        const cached = (await cache.match(req)) ||
+          (await cache.match('/index.html'));
+        if (cached) return cached;
+      } catch {
+        // Storage restrictions must not prevent a network request.
+      }
+
+      try {
+        const response = await fetch(req);
+        if (response.ok && response.type === 'basic') {
+          try {
+            const cache = await caches.open(CACHE);
+            await cache.put('/index.html', response.clone());
+          } catch {
+            // Return the live page even if caching is unavailable.
+          }
+        }
+        return response;
+      } catch {
+        return new Response(
+          'HaemCount is unavailable offline because its cached page is missing. Please reconnect and reload.',
+          {
+            status: 503,
+            headers: { 'Content-Type': 'text/plain; charset=utf-8' }
+          }
+        );
+      }
+    })());
     return;
   }
 
