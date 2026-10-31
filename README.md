@@ -51,6 +51,14 @@ HaemCount can be installed as a Progressive Web App (PWA) for offline use and a 
 
 > **Note:** The first visit must be online so the app can cache its files. After that, you can use it without an internet connection.
 
+### Screenshots
+Desktop layout — the counting interface, cell percentages and live chart.
+<img width="819" height="894" alt="image" src="https://github.com/user-attachments/assets/0585632b-815c-48a9-a115-32521a080a6c" />
+<img width="815" height="893" alt="image" src="https://github.com/user-attachments/assets/b78d7cb6-6965-4253-bb68-0de0c14be259" />
+
+Mobile layout — the interface adapted for a smaller screen.
+<img width="815" height="892" alt="image" src="https://github.com/user-attachments/assets/d8d9a56d-91f0-4a65-9a47-1f3f0815d7e1" />
+
 ### Hosting
 
 HaemCount is a static site. No installation, build step, or backend is required.
